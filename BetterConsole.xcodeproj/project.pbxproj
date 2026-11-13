@@ -1,0 +1,555 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		05166CEE6263F93A027B46C5 /* BCMobileDevice in Frameworks */ = {isa = PBXBuildFile; productRef = DE370B38A2B2CB394B722B30 /* BCMobileDevice */; };
+		329CAC904DC724A159D3545A /* LogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61416DFBF9C4C902A31D612D /* LogDetailView.swift */; };
+		62515604F5555428E22DC55B /* LogTimestampFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */; };
+		6EA04DF2FBB586141969F64A /* FollowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */; };
+		7783986BB87D39E2B3E394C3 /* BCStreaming in Frameworks */ = {isa = PBXBuildFile; productRef = A79B420BD2FD75BC9D5EC22E /* BCStreaming */; };
+		7813AE2235ECE87479D7FE3C /* DeviceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */; };
+		8E6E909000D1988562FEE084 /* BetterConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */; };
+		8FAEB1A38CC5B102A8D74722 /* FollowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */; };
+		AE8228C4F79FBC4A58319940 /* LogTimestampFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */; };
+		C34189AA9A4115AA70F29B2A /* LogTimestampFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751E71ED4D34F20BF61C7C8A /* LogTimestampFormatterTests.swift */; };
+		C558FE8DDA95068516D086FB /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05FF695F1AE2DAAE45379A21 /* LogView.swift */; };
+		C65B16ECD162469C18940D2C /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C08C3584B187D70C939DD64 /* AppEnvironment.swift */; };
+		CB33165CFED1793F6F20E563 /* BCStore in Frameworks */ = {isa = PBXBuildFile; productRef = ADB6C94E21138B2E9A42B638 /* BCStore */; };
+		CDFE8545F76AFFBAEB8B1BC5 /* BCTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8F5D4297F689EDC807A1C23A /* BCTransport */; };
+		CF2F161DC4759B36D81B06D4 /* FollowTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E93A8AD525B8E5A71C19850 /* FollowTrackerTests.swift */; };
+		D72E563A51BE1F6695548352 /* MainThreadProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D73407BA523432E6DD08191A /* MainThreadProbe.swift */; };
+		E8B549EBE0581C58D8128070 /* BCModel in Frameworks */ = {isa = PBXBuildFile; productRef = 4976774910F91C8C2FD918B9 /* BCModel */; };
+		F19181B68B079D8AE7D471CB /* LogColumns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E17D78D7F9EAF202CF735F /* LogColumns.swift */; };
+		F2E61BF91E3405F01E446DF8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2F503C977CB70DC79A5EDD /* SettingsView.swift */; };
+		FA34CA293DA7FE4FF6D5F341 /* LogTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6B283E13911799351DCFA0 /* LogTableView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		05FF695F1AE2DAAE45379A21 /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
+		0B197D56D2B9F0C5C91DDD39 /* BetterConsole.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BetterConsole.entitlements; sourceTree = "<group>"; };
+		0E93A8AD525B8E5A71C19850 /* FollowTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowTrackerTests.swift; sourceTree = "<group>"; };
+		10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowTracker.swift; sourceTree = "<group>"; };
+		19E17D78D7F9EAF202CF735F /* LogColumns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogColumns.swift; sourceTree = "<group>"; };
+		1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTimestampFormatter.swift; sourceTree = "<group>"; };
+		2FF6E68E7D3CE2AE49EB75E0 /* BetterConsoleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BetterConsoleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		61416DFBF9C4C902A31D612D /* LogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogDetailView.swift; sourceTree = "<group>"; };
+		6A6B283E13911799351DCFA0 /* LogTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTableView.swift; sourceTree = "<group>"; };
+		751E71ED4D34F20BF61C7C8A /* LogTimestampFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTimestampFormatterTests.swift; sourceTree = "<group>"; };
+		7C08C3584B187D70C939DD64 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BetterConsoleApp.swift; sourceTree = "<group>"; };
+		ACAD36045B8018C86EF5340B /* BetterConsoleKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BetterConsoleKit; path = Packages/BetterConsoleKit; sourceTree = SOURCE_ROOT; };
+		BD2F503C977CB70DC79A5EDD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSidebar.swift; sourceTree = "<group>"; };
+		D199AB61D3B143C1879316F8 /* BetterConsole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BetterConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D73407BA523432E6DD08191A /* MainThreadProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadProbe.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		DB4153A0A894FB38D5804481 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E8B549EBE0581C58D8128070 /* BCModel in Frameworks */,
+				CB33165CFED1793F6F20E563 /* BCStore in Frameworks */,
+				CDFE8545F76AFFBAEB8B1BC5 /* BCTransport in Frameworks */,
+				7783986BB87D39E2B3E394C3 /* BCStreaming in Frameworks */,
+				05166CEE6263F93A027B46C5 /* BCMobileDevice in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0273E9671B700B370EE42B25 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7C08C3584B187D70C939DD64 /* AppEnvironment.swift */,
+				0B197D56D2B9F0C5C91DDD39 /* BetterConsole.entitlements */,
+				8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */,
+				9B3CBDBBF621B7E7B9CE925D /* Diagnostics */,
+				FD58F6E936F6C6F1ECE3B8A5 /* LogView */,
+				B9F2DB786628CC8FCA95F7F2 /* Settings */,
+				80497E4725E530FC0DA82A5D /* Sidebar */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		071E17EBFC83E76A122478E9 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				ACAD36045B8018C86EF5340B /* BetterConsoleKit */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		65A791B4F6818484E3C4F257 /* BetterConsoleTests */ = {
+			isa = PBXGroup;
+			children = (
+				0E93A8AD525B8E5A71C19850 /* FollowTrackerTests.swift */,
+				751E71ED4D34F20BF61C7C8A /* LogTimestampFormatterTests.swift */,
+			);
+			path = BetterConsoleTests;
+			sourceTree = "<group>";
+		};
+		80497E4725E530FC0DA82A5D /* Sidebar */ = {
+			isa = PBXGroup;
+			children = (
+				C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */,
+			);
+			path = Sidebar;
+			sourceTree = "<group>";
+		};
+		9B3CBDBBF621B7E7B9CE925D /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				D73407BA523432E6DD08191A /* MainThreadProbe.swift */,
+			);
+			path = Diagnostics;
+			sourceTree = "<group>";
+		};
+		B5A18E0F793D3872C650F508 = {
+			isa = PBXGroup;
+			children = (
+				0273E9671B700B370EE42B25 /* App */,
+				071E17EBFC83E76A122478E9 /* Packages */,
+				EC2833BFB264F7CD5E3D8CAF /* Tests */,
+				E161FE0C017E67F8E43EF2DA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B9F2DB786628CC8FCA95F7F2 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				BD2F503C977CB70DC79A5EDD /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		E161FE0C017E67F8E43EF2DA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D199AB61D3B143C1879316F8 /* BetterConsole.app */,
+				2FF6E68E7D3CE2AE49EB75E0 /* BetterConsoleTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		EC2833BFB264F7CD5E3D8CAF /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				65A791B4F6818484E3C4F257 /* BetterConsoleTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		FD58F6E936F6C6F1ECE3B8A5 /* LogView */ = {
+			isa = PBXGroup;
+			children = (
+				10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */,
+				19E17D78D7F9EAF202CF735F /* LogColumns.swift */,
+				61416DFBF9C4C902A31D612D /* LogDetailView.swift */,
+				6A6B283E13911799351DCFA0 /* LogTableView.swift */,
+				1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */,
+				05FF695F1AE2DAAE45379A21 /* LogView.swift */,
+			);
+			path = LogView;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2256F2314BAB514E1D09732A /* BetterConsoleTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9A04947212A0D75CF4A5C10D /* Build configuration list for PBXNativeTarget "BetterConsoleTests" */;
+			buildPhases = (
+				90DBB6B93B10B0D53E79F4CF /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BetterConsoleTests;
+			packageProductDependencies = (
+			);
+			productName = BetterConsoleTests;
+			productReference = 2FF6E68E7D3CE2AE49EB75E0 /* BetterConsoleTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		6BADFAA941F9FA10148398CA /* BetterConsole */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 51BD3C0ECE5074B426AE8D80 /* Build configuration list for PBXNativeTarget "BetterConsole" */;
+			buildPhases = (
+				B30E8360D2747C36375B68C4 /* Sources */,
+				DB4153A0A894FB38D5804481 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BetterConsole;
+			packageProductDependencies = (
+				4976774910F91C8C2FD918B9 /* BCModel */,
+				ADB6C94E21138B2E9A42B638 /* BCStore */,
+				8F5D4297F689EDC807A1C23A /* BCTransport */,
+				A79B420BD2FD75BC9D5EC22E /* BCStreaming */,
+				DE370B38A2B2CB394B722B30 /* BCMobileDevice */,
+			);
+			productName = BetterConsole;
+			productReference = D199AB61D3B143C1879316F8 /* BetterConsole.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		37AFDA3BFFFB3190C1E20FD7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2256F2314BAB514E1D09732A = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+					6BADFAA941F9FA10148398CA = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 66E6261A90A25A423A39C8DE /* Build configuration list for PBXProject "BetterConsole" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B5A18E0F793D3872C650F508;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				22BABB83D922CF364DF99940 /* XCLocalSwiftPackageReference "Packages/BetterConsoleKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E161FE0C017E67F8E43EF2DA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6BADFAA941F9FA10148398CA /* BetterConsole */,
+				2256F2314BAB514E1D09732A /* BetterConsoleTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		90DBB6B93B10B0D53E79F4CF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8FAEB1A38CC5B102A8D74722 /* FollowTracker.swift in Sources */,
+				CF2F161DC4759B36D81B06D4 /* FollowTrackerTests.swift in Sources */,
+				AE8228C4F79FBC4A58319940 /* LogTimestampFormatter.swift in Sources */,
+				C34189AA9A4115AA70F29B2A /* LogTimestampFormatterTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B30E8360D2747C36375B68C4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C65B16ECD162469C18940D2C /* AppEnvironment.swift in Sources */,
+				8E6E909000D1988562FEE084 /* BetterConsoleApp.swift in Sources */,
+				7813AE2235ECE87479D7FE3C /* DeviceSidebar.swift in Sources */,
+				6EA04DF2FBB586141969F64A /* FollowTracker.swift in Sources */,
+				F19181B68B079D8AE7D471CB /* LogColumns.swift in Sources */,
+				329CAC904DC724A159D3545A /* LogDetailView.swift in Sources */,
+				FA34CA293DA7FE4FF6D5F341 /* LogTableView.swift in Sources */,
+				62515604F5555428E22DC55B /* LogTimestampFormatter.swift in Sources */,
+				C558FE8DDA95068516D086FB /* LogView.swift in Sources */,
+				D72E563A51BE1F6695548352 /* MainThreadProbe.swift in Sources */,
+				F2E61BF91E3405F01E446DF8 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		300ACC83B9FA01DB6AC6B006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		3B60B96834B05C85BFD49278 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.betterconsole.BetterConsoleTests;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Debug;
+		};
+		3C15E83495601565D69CD41A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/BetterConsole.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = BetterConsole;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.betterconsole.BetterConsole;
+				PRODUCT_NAME = BetterConsole;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
+		409799120E782C6CA5F33145 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		55C05A79F5035CDB64170C99 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/BetterConsole.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = BetterConsole;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.betterconsole.BetterConsole;
+				PRODUCT_NAME = BetterConsole;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Debug;
+		};
+		7A8949E3FA8DF363ACA95EE9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.betterconsole.BetterConsoleTests;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		51BD3C0ECE5074B426AE8D80 /* Build configuration list for PBXNativeTarget "BetterConsole" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				55C05A79F5035CDB64170C99 /* Debug */,
+				3C15E83495601565D69CD41A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		66E6261A90A25A423A39C8DE /* Build configuration list for PBXProject "BetterConsole" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				409799120E782C6CA5F33145 /* Debug */,
+				300ACC83B9FA01DB6AC6B006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9A04947212A0D75CF4A5C10D /* Build configuration list for PBXNativeTarget "BetterConsoleTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B60B96834B05C85BFD49278 /* Debug */,
+				7A8949E3FA8DF363ACA95EE9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		22BABB83D922CF364DF99940 /* XCLocalSwiftPackageReference "Packages/BetterConsoleKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/BetterConsoleKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4976774910F91C8C2FD918B9 /* BCModel */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCModel;
+		};
+		8F5D4297F689EDC807A1C23A /* BCTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCTransport;
+		};
+		A79B420BD2FD75BC9D5EC22E /* BCStreaming */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCStreaming;
+		};
+		ADB6C94E21138B2E9A42B638 /* BCStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCStore;
+		};
+		DE370B38A2B2CB394B722B30 /* BCMobileDevice */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCMobileDevice;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 37AFDA3BFFFB3190C1E20FD7 /* Project object */;
+}

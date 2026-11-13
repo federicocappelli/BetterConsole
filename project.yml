@@ -1,0 +1,65 @@
+name: BetterConsole
+options:
+  bundleIdPrefix: app.betterconsole
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  BetterConsoleKit:
+    path: Packages/BetterConsoleKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    # Local ad-hoc signing (no team). Hardened Runtime stays on.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+targets:
+  BetterConsole:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: App
+    scheme:
+      testTargets:
+        - BetterConsoleTests
+    dependencies:
+      - package: BetterConsoleKit
+        product: BCModel
+      - package: BetterConsoleKit
+        product: BCStore
+      - package: BetterConsoleKit
+        product: BCTransport
+      - package: BetterConsoleKit
+        product: BCStreaming
+      - package: BetterConsoleKit
+        product: BCMobileDevice
+    settings:
+      base:
+        PRODUCT_NAME: BetterConsole
+        PRODUCT_BUNDLE_IDENTIFIER: app.betterconsole.BetterConsole
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: BetterConsole
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: App/BetterConsole.entitlements
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+  BetterConsoleTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Tests/BetterConsoleTests
+      # Pure App sources under test, compiled into the bundle (no app host, so no streaming).
+      - path: App/LogView/LogTimestampFormatter.swift
+      - path: App/LogView/FollowTracker.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.betterconsole.BetterConsoleTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_STRICT_CONCURRENCY: complete
