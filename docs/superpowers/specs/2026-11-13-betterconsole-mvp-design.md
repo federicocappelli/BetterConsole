@@ -39,8 +39,11 @@ Goals:
 - Log table columns: Time, Type, Process, Subsystem, Category, Message.
 - Selecting a row shows a detail pane beneath the table with the full message
   and all fields (like Console.app's lower pane).
-- Sustains Console-level throughput (thousands of messages/second) without
-  UI stalls.
+- Sustains high throughput (target in 6.5.1) without UI stalls; when overloaded,
+  drops excess messages and shows how many were dropped.
+- Settings window with one setting: maximum memory for logs (default 4 GB).
+- Disconnected devices stay in the sidebar with their logs and auto-resume
+  streaming when they come back.
 
 Non-goals for this phase (come later, but the MVP must not block them):
 
@@ -207,26 +210,51 @@ protocol LogTransport: Sendable {
     is the reference for the wire format).
   - **Highest-risk part of the project → first task is a throwaway spike** to
     prove that a Developer-ID-signed, hardened-runtime app can open
-    `os_trace_relay` on an iOS 27 device over USB and Wi-Fi without
-    Apple-only entitlements. If the spike fails, physical devices ship in a
-    later phase via an alternative transport, and the MVP ships with Mac +
-    simulators (decision goes back to the user).
+    `os_trace_relay` and decode entries from a device without Apple-only
+    entitlements. (user decision)
+    - **Pass = USB on iOS 26+.** If that works, physical devices ship in the MVP.
+    - Wi-Fi and iOS < 26 are **nice-to-have**: included only if they work with
+      the same code path; otherwise they're listed as known gaps, not blockers.
+    - **Fail** (USB on iOS 26+ doesn't work): the MVP ships with Mac +
+      simulators, `MobileDeviceTransport` is dropped from this phase, and the
+      transport choice goes back to the user.
 
-### 6.5 Store
+### 6.5 Store and memory budget
 
 ```swift
 protocol LogStore: AnyObject {
     var count: Int { get }
+    var estimatedBytes: Int { get }
     subscript(index: Int) -> LogEntry { get }
-    func append(contentsOf: [LogEntry])   // evicts oldest beyond capacity
+    func append(contentsOf: [LogEntry])
+    func removeOldest(_ n: Int)
     func removeAll()
 }
 ```
 
-- `RingBufferLogStore`, default capacity **500,000** entries per device session
-  (builder may tune after measuring memory; becomes a setting later).
+- `RingBufferLogStore` per device session; no fixed per-device cap.
+- **Global memory budget across all sessions** (user decision): default
+  **4 GB**, changeable in the app's **Settings window** (the only setting in
+  the MVP). A `MemoryBudget` coordinator tracks the estimated bytes of every
+  store; when the total exceeds the budget it evicts the **oldest entries
+  across all sessions** (by timestamp) until under budget. Lowering the setting
+  takes effect immediately.
+- Per-entry size is an estimate (string UTF-8 lengths + fixed overhead); the
+  builder calibrates the constant against real measurements.
 - Main-actor isolated; batches arrive already decoded off-main, so main-thread
   work per batch is an append plus one table update.
+
+### 6.5.1 Throughput and overload (user decision: drop + counter)
+
+- Target (Claude's call): sustain **≥ 20,000 msg/s per Mac stream** decoded,
+  stored and displayed with no UI stall (main thread never blocked > 16 ms).
+- Pipeline: reader → decoder (off-main) → bounded queue → main-actor batch
+  apply. The reader must never block on the UI, so `log` itself never backs up.
+- When the bounded queue is full, **excess entries are dropped** and counted.
+  The session exposes `droppedCount`; the toolbar shows "N dropped" next to the
+  message count whenever it's > 0. Clear resets it.
+- Decoder choice (`JSONDecoder` vs. a hand-written/`JSONSerialization` path) is
+  the builder's, driven by measuring against the target.
 
 ### 6.6 Streaming session and UI
 
@@ -237,10 +265,19 @@ protocol LogStore: AnyObject {
   - **Pause** → cancels the transport stream (stops the child process / relay);
     already-received messages stay. Start resumes appending.
   - **Clear** → empties the store; streaming state unchanged.
-- Sessions persist per device while the app runs; **switching devices in the
-  sidebar does not stop other streams** (Claude's call: lets you compare a
-  phone and a simulator side by side by switching). A device that disconnects
-  moves its session to `failed` with a visible message; history remains.
+- Sessions are **keyed by device ID** and persist while the app runs;
+  **switching devices in the sidebar does not stop other streams** (Claude's
+  call: lets you compare a phone and a simulator by switching).
+- **Disconnect / reconnect** (user decision: auto-resume):
+  - When a device disappears (simulator shut down, phone unplugged), its
+    sidebar row **stays, greyed out**, and its logs remain browsable. The
+    session moves to `disconnected` (new state) and the log view shows a banner.
+  - `DeviceRegistry` therefore merges live discovery with known sessions: a row
+    exists if the device is discovered **or** has a session.
+  - When the same device ID is discovered again, a session that was
+    `streaming` at disconnect time **restarts automatically**, appending to the
+    same store. A session that was paused/idle stays paused.
+  - A row with no logs whose device disappears is removed (nothing to keep).
 - Log table: `NSTableView` (view-based, fixed row height, cell reuse) wrapped
   in `NSViewRepresentable`. Inserts are applied in batches; at most ~10 table
   updates per second.
@@ -259,9 +296,10 @@ protocol LogStore: AnyObject {
 
 ### 6.7 Errors
 
-- Transport failure (process exits, device disconnects, framework missing):
-  session → `failed`, inline banner in the log view with the reason and a
-  "Retry" button.
+- Device disconnect: handled as in 6.6 (`disconnected`, auto-resume).
+- Other transport failures (process exits unexpectedly while the device is
+  still present, framework missing, relay error): session → `failed`, inline
+  banner with the reason and a "Retry" button.
 - `<private>` redaction is expected behaviour (same as Console.app), not an
   error.
 
@@ -286,7 +324,11 @@ protocol LogStore: AnyObject {
     non-JSON header line, unknown fields → `extra`, every `messageType`.
   - Line splitting across arbitrary chunk boundaries.
   - Batching (time- and size-based flushes).
-  - Ring buffer eviction and indexing.
+  - Ring buffer eviction and indexing; global memory budget eviction across
+    several stores (oldest-first), and lowering the budget at runtime.
+  - Overload: bounded queue drops and counts; Clear resets the counter.
+  - Disconnect → reconnect: streaming session auto-resumes into the same store;
+    paused session stays paused; row with no logs disappears.
   - `simctl list -j` parsing.
   - `StreamSession` state transitions (start → pause → start, clear while
     streaming, transport failure) with a fake `LogTransport`.
@@ -297,7 +339,8 @@ protocol LogStore: AnyObject {
 
 ## 9. Left to the builder
 
-- Exact batching intervals and ring-buffer capacity (measure, then tune).
+- Exact batching intervals, bounded-queue size, and the per-entry size
+  estimate (measure, then tune).
 - Bundle identifier, app icon, signing team configuration.
 - Xcode project mechanics (file-system-synchronised groups recommended).
 - Exact os_trace wire-format decoding details (follow pymobiledevice3 as
