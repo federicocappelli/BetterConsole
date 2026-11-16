@@ -8,11 +8,20 @@
 
 /* Begin PBXBuildFile section */
 		05166CEE6263F93A027B46C5 /* BCMobileDevice in Frameworks */ = {isa = PBXBuildFile; productRef = DE370B38A2B2CB394B722B30 /* BCMobileDevice */; };
+		0603D3E3DD37A6E2B0A97BDF /* BCFilter in Frameworks */ = {isa = PBXBuildFile; productRef = 7F637C6E1777B3B21A3B3B61 /* BCFilter */; };
+		11F86A21B8B5ED686669A410 /* FilterBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7B1612B8C3321CFF0BCEAF /* FilterBar.swift */; };
+		30699756A89DC0E45DB85BB5 /* BubbleField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DAA0D071F9885D0326B08BB /* BubbleField.swift */; };
+		31EBAA1A1B8960C81542D5FC /* LogColumns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E17D78D7F9EAF202CF735F /* LogColumns.swift */; };
 		329CAC904DC724A159D3545A /* LogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61416DFBF9C4C902A31D612D /* LogDetailView.swift */; };
+		3DAA9A656A05A54E98F3361B /* BCModel in Frameworks */ = {isa = PBXBuildFile; productRef = 5638142D835865158570B6E1 /* BCModel */; };
+		578A80EA69B304CACEE96F58 /* BubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6F3C8BF435F1F1D827CDA40 /* BubbleView.swift */; };
 		62515604F5555428E22DC55B /* LogTimestampFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */; };
+		659793DCD937B2CBE2C9F89D /* RowCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9C51991A590474B64E8409 /* RowCopyTests.swift */; };
+		6E86DD36A28D9B586530674E /* RowCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7AB811347B85A9654346FC /* RowCopy.swift */; };
 		6EA04DF2FBB586141969F64A /* FollowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */; };
 		7783986BB87D39E2B3E394C3 /* BCStreaming in Frameworks */ = {isa = PBXBuildFile; productRef = A79B420BD2FD75BC9D5EC22E /* BCStreaming */; };
 		7813AE2235ECE87479D7FE3C /* DeviceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */; };
+		7E329C4079196D62C6F0C674 /* RowCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7AB811347B85A9654346FC /* RowCopy.swift */; };
 		8E6E909000D1988562FEE084 /* BetterConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */; };
 		8FAEB1A38CC5B102A8D74722 /* FollowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */; };
 		AE8228C4F79FBC4A58319940 /* LogTimestampFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */; };
@@ -27,6 +36,7 @@
 		F19181B68B079D8AE7D471CB /* LogColumns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E17D78D7F9EAF202CF735F /* LogColumns.swift */; };
 		F2E61BF91E3405F01E446DF8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2F503C977CB70DC79A5EDD /* SettingsView.swift */; };
 		FA34CA293DA7FE4FF6D5F341 /* LogTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6B283E13911799351DCFA0 /* LogTableView.swift */; };
+		FDE58DE2F72C26832F0D987F /* FilterDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38993CD41371F51DC6BA5844 /* FilterDialogs.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,19 +47,33 @@
 		19E17D78D7F9EAF202CF735F /* LogColumns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogColumns.swift; sourceTree = "<group>"; };
 		1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTimestampFormatter.swift; sourceTree = "<group>"; };
 		2FF6E68E7D3CE2AE49EB75E0 /* BetterConsoleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BetterConsoleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		38993CD41371F51DC6BA5844 /* FilterDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterDialogs.swift; sourceTree = "<group>"; };
+		4B7AB811347B85A9654346FC /* RowCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowCopy.swift; sourceTree = "<group>"; };
+		5C9C51991A590474B64E8409 /* RowCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowCopyTests.swift; sourceTree = "<group>"; };
 		61416DFBF9C4C902A31D612D /* LogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogDetailView.swift; sourceTree = "<group>"; };
 		6A6B283E13911799351DCFA0 /* LogTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTableView.swift; sourceTree = "<group>"; };
 		751E71ED4D34F20BF61C7C8A /* LogTimestampFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTimestampFormatterTests.swift; sourceTree = "<group>"; };
 		7C08C3584B187D70C939DD64 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BetterConsoleApp.swift; sourceTree = "<group>"; };
+		8DAA0D071F9885D0326B08BB /* BubbleField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleField.swift; sourceTree = "<group>"; };
 		ACAD36045B8018C86EF5340B /* BetterConsoleKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BetterConsoleKit; path = Packages/BetterConsoleKit; sourceTree = SOURCE_ROOT; };
 		BD2F503C977CB70DC79A5EDD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSidebar.swift; sourceTree = "<group>"; };
+		C6F3C8BF435F1F1D827CDA40 /* BubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleView.swift; sourceTree = "<group>"; };
 		D199AB61D3B143C1879316F8 /* BetterConsole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BetterConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D73407BA523432E6DD08191A /* MainThreadProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadProbe.swift; sourceTree = "<group>"; };
+		FD7B1612B8C3321CFF0BCEAF /* FilterBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterBar.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		84A935F1E7B4067CD794A16D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3DAA9A656A05A54E98F3361B /* BCModel in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DB4153A0A894FB38D5804481 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -59,6 +83,7 @@
 				CDFE8545F76AFFBAEB8B1BC5 /* BCTransport in Frameworks */,
 				7783986BB87D39E2B3E394C3 /* BCStreaming in Frameworks */,
 				05166CEE6263F93A027B46C5 /* BCMobileDevice in Frameworks */,
+				0603D3E3DD37A6E2B0A97BDF /* BCFilter in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,6 +97,7 @@
 				0B197D56D2B9F0C5C91DDD39 /* BetterConsole.entitlements */,
 				8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */,
 				9B3CBDBBF621B7E7B9CE925D /* Diagnostics */,
+				A6F223B2B34065E36ADF67C1 /* Filter */,
 				FD58F6E936F6C6F1ECE3B8A5 /* LogView */,
 				B9F2DB786628CC8FCA95F7F2 /* Settings */,
 				80497E4725E530FC0DA82A5D /* Sidebar */,
@@ -92,6 +118,7 @@
 			children = (
 				0E93A8AD525B8E5A71C19850 /* FollowTrackerTests.swift */,
 				751E71ED4D34F20BF61C7C8A /* LogTimestampFormatterTests.swift */,
+				5C9C51991A590474B64E8409 /* RowCopyTests.swift */,
 			);
 			path = BetterConsoleTests;
 			sourceTree = "<group>";
@@ -110,6 +137,17 @@
 				D73407BA523432E6DD08191A /* MainThreadProbe.swift */,
 			);
 			path = Diagnostics;
+			sourceTree = "<group>";
+		};
+		A6F223B2B34065E36ADF67C1 /* Filter */ = {
+			isa = PBXGroup;
+			children = (
+				8DAA0D071F9885D0326B08BB /* BubbleField.swift */,
+				C6F3C8BF435F1F1D827CDA40 /* BubbleView.swift */,
+				FD7B1612B8C3321CFF0BCEAF /* FilterBar.swift */,
+				38993CD41371F51DC6BA5844 /* FilterDialogs.swift */,
+			);
+			path = Filter;
 			sourceTree = "<group>";
 		};
 		B5A18E0F793D3872C650F508 = {
@@ -156,6 +194,7 @@
 				6A6B283E13911799351DCFA0 /* LogTableView.swift */,
 				1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */,
 				05FF695F1AE2DAAE45379A21 /* LogView.swift */,
+				4B7AB811347B85A9654346FC /* RowCopy.swift */,
 			);
 			path = LogView;
 			sourceTree = "<group>";
@@ -168,6 +207,7 @@
 			buildConfigurationList = 9A04947212A0D75CF4A5C10D /* Build configuration list for PBXNativeTarget "BetterConsoleTests" */;
 			buildPhases = (
 				90DBB6B93B10B0D53E79F4CF /* Sources */,
+				84A935F1E7B4067CD794A16D /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -175,6 +215,7 @@
 			);
 			name = BetterConsoleTests;
 			packageProductDependencies = (
+				5638142D835865158570B6E1 /* BCModel */,
 			);
 			productName = BetterConsoleTests;
 			productReference = 2FF6E68E7D3CE2AE49EB75E0 /* BetterConsoleTests.xctest */;
@@ -198,6 +239,7 @@
 				8F5D4297F689EDC807A1C23A /* BCTransport */,
 				A79B420BD2FD75BC9D5EC22E /* BCStreaming */,
 				DE370B38A2B2CB394B722B30 /* BCMobileDevice */,
+				7F637C6E1777B3B21A3B3B61 /* BCFilter */,
 			);
 			productName = BetterConsole;
 			productReference = D199AB61D3B143C1879316F8 /* BetterConsole.app */;
@@ -252,8 +294,11 @@
 			files = (
 				8FAEB1A38CC5B102A8D74722 /* FollowTracker.swift in Sources */,
 				CF2F161DC4759B36D81B06D4 /* FollowTrackerTests.swift in Sources */,
+				31EBAA1A1B8960C81542D5FC /* LogColumns.swift in Sources */,
 				AE8228C4F79FBC4A58319940 /* LogTimestampFormatter.swift in Sources */,
 				C34189AA9A4115AA70F29B2A /* LogTimestampFormatterTests.swift in Sources */,
+				7E329C4079196D62C6F0C674 /* RowCopy.swift in Sources */,
+				659793DCD937B2CBE2C9F89D /* RowCopyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,7 +308,11 @@
 			files = (
 				C65B16ECD162469C18940D2C /* AppEnvironment.swift in Sources */,
 				8E6E909000D1988562FEE084 /* BetterConsoleApp.swift in Sources */,
+				30699756A89DC0E45DB85BB5 /* BubbleField.swift in Sources */,
+				578A80EA69B304CACEE96F58 /* BubbleView.swift in Sources */,
 				7813AE2235ECE87479D7FE3C /* DeviceSidebar.swift in Sources */,
+				11F86A21B8B5ED686669A410 /* FilterBar.swift in Sources */,
+				FDE58DE2F72C26832F0D987F /* FilterDialogs.swift in Sources */,
 				6EA04DF2FBB586141969F64A /* FollowTracker.swift in Sources */,
 				F19181B68B079D8AE7D471CB /* LogColumns.swift in Sources */,
 				329CAC904DC724A159D3545A /* LogDetailView.swift in Sources */,
@@ -271,6 +320,7 @@
 				62515604F5555428E22DC55B /* LogTimestampFormatter.swift in Sources */,
 				C558FE8DDA95068516D086FB /* LogView.swift in Sources */,
 				D72E563A51BE1F6695548352 /* MainThreadProbe.swift in Sources */,
+				6E86DD36A28D9B586530674E /* RowCopy.swift in Sources */,
 				F2E61BF91E3405F01E446DF8 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -532,6 +582,14 @@
 		4976774910F91C8C2FD918B9 /* BCModel */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BCModel;
+		};
+		5638142D835865158570B6E1 /* BCModel */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCModel;
+		};
+		7F637C6E1777B3B21A3B3B61 /* BCFilter */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCFilter;
 		};
 		8F5D4297F689EDC807A1C23A /* BCTransport */ = {
 			isa = XCSwiftPackageProductDependency;

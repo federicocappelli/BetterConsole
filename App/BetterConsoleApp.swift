@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import BCFilter
 import BCModel
 import BCStreaming
 import BCTransport
@@ -10,7 +11,10 @@ struct BetterConsoleApp: App {
 
     var body: some Scene {
         Window("BetterConsole", id: "main") {
-            RootView(registry: appDelegate.environment.registry)
+            RootView(
+                registry: appDelegate.environment.registry,
+                library: appDelegate.environment.library,
+                workspace: appDelegate.environment.workspace)
         }
         .defaultSize(width: 1100, height: 700)
 
@@ -40,6 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct RootView: View {
     let registry: SessionRegistry
+    let library: FilterLibrary
+    let workspace: FilterWorkspace
     @State private var selection: LogDevice.ID? = "local"
 
     var body: some View {
@@ -48,12 +54,13 @@ struct RootView: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
         } detail: {
             if let selection, let session = registry.session(for: selection) {
-                LogView(session: session)
+                LogView(session: session, library: library, workspace: workspace)
                     .id(selection)
             } else {
                 ContentUnavailableView("No Device Selected", systemImage: "sidebar.left")
             }
         }
+        .filterLibraryAlerts(library: library)
         .onChange(of: registry.rows) {
             // The selected row is gone (device vanished with nothing to show, or its logs
             // were cleared while disconnected): fall back to this Mac.

@@ -1,10 +1,14 @@
 import SwiftUI
+import BCFilter
 import BCModel
 import BCStreaming
 
-/// The log pane for one session: toolbar, banners, empty state, the table and the detail pane.
+/// The log pane for one session: toolbar, banners, filter bar, empty state, the table and the
+/// detail pane.
 struct LogView: View {
     let session: StreamSession
+    let library: FilterLibrary
+    let workspace: FilterWorkspace
     /// Bumped by the Now button; the table scrolls to the bottom and resumes following.
     @State private var nowRequest = 0
     @State private var selectedEntry: LogEntry?
@@ -18,9 +22,11 @@ struct LogView: View {
                 banner
                 Divider()
             }
+            FilterBar(session: session, library: library, workspace: workspace)
+            Divider()
             ZStack {
                 LogTableView(
-                    session: session, nowRequest: nowRequest,
+                    session: session, workspace: workspace, nowRequest: nowRequest,
                     onSelect: { selectedEntry = $0 },
                     detail: LogDetailView(entry: selectedEntry))
                 EmptyStateOverlay(session: session)
@@ -85,9 +91,9 @@ private struct Banner: View {
     }
 }
 
-/// Sets the window subtitle (message and dropped counts), at most `refreshInterval` apart:
-/// a subtitle change re-lays out the window title bar (several ms), and `revision` changes
-/// up to 10 times a second.
+/// Sets the window subtitle (message, matching and dropped counts), at most `refreshInterval`
+/// apart: a subtitle change re-lays out the window title bar (several ms), and `revision`
+/// changes up to 10 times a second.
 private struct SessionSubtitle: View {
     static let refreshInterval: Duration = .milliseconds(250)
 
@@ -99,32 +105,44 @@ private struct SessionSubtitle: View {
             .navigationSubtitle(subtitle)
             .task(id: ObjectIdentifier(session)) {
                 // `Observations` coalesces changes made while this loop sleeps.
-                for await (count, dropped) in Observations({ [session] in
+                for await text in Observations({ [session] in
                     _ = session.revision
-                    return (session.store.count, session.droppedCount)
+                    return Self.text(
+                        shown: session.filter != nil ? session.rows.count : nil,
+                        count: session.store.count, dropped: session.droppedCount)
                 }) {
-                    subtitle = Self.text(count: count, dropped: dropped)
+                    subtitle = text
                     try? await Task.sleep(for: Self.refreshInterval)
                 }
             }
     }
 
-    static func text(count: Int, dropped: Int) -> String {
-        var parts = ["\(count.formatted()) messages"]
+    /// `shown`: the number of matching messages while a filter is set, else nil.
+    static func text(shown: Int?, count: Int, dropped: Int) -> String {
+        var parts = [
+            shown.map { "\($0.formatted()) of \(count.formatted()) messages" }
+                ?? "\(count.formatted()) messages"
+        ]
         if dropped > 0 { parts.append("\(dropped.formatted()) dropped") }
         return parts.joined(separator: " · ")
     }
 }
 
-/// "No Messages" over the table while it is empty and not streaming. Only a change of
-/// "is empty" re-renders it, not every `revision`.
+/// "No Messages" over the table while the session has no messages and is not streaming;
+/// "No Matching Messages" while it has some but none matches the filter (and the rescan is
+/// done). Only a change of which one applies re-renders it, not every `revision`.
 private struct EmptyStateOverlay: View {
+    enum Content: Equatable {
+        case none, noMessages, noMatches
+    }
+
     let session: StreamSession
-    @State private var isEmpty = true
+    @State private var content = Content.noMessages
 
     var body: some View {
         ZStack {
-            if isEmpty && session.state != .streaming {
+            switch content {
+            case .noMessages where session.state != .streaming:
                 ContentUnavailableView {
                     Text("No Messages")
                 } description: {
@@ -134,14 +152,28 @@ private struct EmptyStateOverlay: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(.background)
+            case .noMatches:
+                ContentUnavailableView {
+                    Text("No Matching Messages")
+                } description: {
+                    Text("No messages match the current filter.")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.background)
+            case .none, .noMessages:
+                EmptyView()
             }
         }
         .task(id: ObjectIdentifier(session)) {
-            for await empty in Observations({ [session] in
+            for await next in Observations({ [session] in
                 _ = session.revision
-                return session.store.count == 0
-            }) where empty != isEmpty {
-                isEmpty = empty
+                if session.store.count == 0 { return Content.noMessages }
+                if session.filter != nil, session.rows.count == 0, !session.isFiltering {
+                    return Content.noMatches
+                }
+                return Content.none
+            }) where next != content {
+                content = next
             }
         }
     }

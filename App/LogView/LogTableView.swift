@@ -1,17 +1,21 @@
 import AppKit
 import Observation
 import SwiftUI
+import BCFilter
 import BCModel
 import BCStore
 import BCStreaming
 
-/// View-based `NSTableView` over `session.store`, with the detail pane below it in an
-/// `NSSplitView` (SwiftUI's `VSplitView` cannot set the initial 70/30 divider position).
-/// The data source reads the store directly. The coordinator observes `session.revision`
+/// View-based `NSTableView` over `session.rows` (every stored message, or only the matching
+/// ones), with the detail pane below it in an `NSSplitView` (SwiftUI's `VSplitView` cannot set
+/// the initial 70/30 divider position).
+/// The data source reads the rows directly. The coordinator observes `session.revision`
 /// itself (SwiftUI only forwards Now requests) and applies updates at most every
 /// `Coordinator.minUpdateInterval`.
 struct LogTableView: NSViewRepresentable {
     let session: StreamSession
+    /// The right-click Hide/Show items edit this device's filter through it.
+    let workspace: FilterWorkspace
     /// Bumped by the Now button: scroll to the bottom and follow again.
     let nowRequest: Int
     /// Called with the selected entry, or nil when the selection is cleared or evicted.
@@ -22,10 +26,10 @@ struct LogTableView: NSViewRepresentable {
     static let rowHeight: CGFloat = 18
     static let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
 
-    func makeCoordinator() -> Coordinator { Coordinator(session: session) }
+    func makeCoordinator() -> Coordinator { Coordinator(session: session, workspace: workspace) }
 
     func makeNSView(context: Context) -> NSSplitView {
-        let table = NSTableView()
+        let table = LogNSTableView()
         table.usesAutomaticRowHeights = false
         table.rowHeight = Self.rowHeight
         table.intercellSpacing = NSSize(width: 6, height: 0)
@@ -68,11 +72,14 @@ struct LogTableView: NSViewRepresentable {
         context.coordinator.observeRevision()
         context.coordinator.detailHost = detailHost
         context.coordinator.onSelect = onSelect
+        table.menuForRow = { [coordinator = context.coordinator] row in coordinator.menu(forRow: row) }
+        table.copySelectedRow = { [coordinator = context.coordinator] in coordinator.copySelectedRow() }
         return split
     }
 
     func updateNSView(_ split: NSSplitView, context: Context) {
         context.coordinator.onSelect = onSelect
+        context.coordinator.workspace = workspace
         if let host = context.coordinator.detailHost, host.rootView != detail {
             host.rootView = detail
         }
@@ -97,6 +104,7 @@ struct LogTableView: NSViewRepresentable {
         static let minUpdateInterval: Duration = .milliseconds(100)
 
         let session: StreamSession
+        var workspace: FilterWorkspace
         var onSelect: @MainActor (LogEntry?) -> Void = { _ in }
         var detailHost: NSHostingView<LogDetailView>?
 
@@ -105,12 +113,13 @@ struct LogTableView: NSViewRepresentable {
         private let columns: [String: LogColumn] = Dictionary(
             uniqueKeysWithValues: LogColumn.defaultColumns.map { ($0.id, $0) })
 
-        /// What the table's rows currently reflect: row count, and the store's `removedCount`
-        /// at the time. The store keeps changing between updates; `evictedSinceShown()` maps
-        /// old rows onto it.
-        private var shownCount = 0
-        private var shownRemovedCount = 0
+        /// Row mapping, top anchor and selection over `session.rows` (the decisions; this
+        /// coordinator applies them to the table).
+        private let viewport = RowViewport()
         private var appliedRevision = -1
+        /// The clip view's origin when the last update finished: a bounds change that moves
+        /// it outside an update is the user's (scroll, resize).
+        private var appliedOriginY: CGFloat?
 
         /// Auto-scroll to the newest row on every update.
         private var followTracker = FollowTracker()
@@ -128,8 +137,9 @@ struct LogTableView: NSViewRepresentable {
         private var pendingUpdate: Task<Void, Never>?
         private var isDetached = false
 
-        init(session: StreamSession) {
+        init(session: StreamSession, workspace: FilterWorkspace) {
             self.session = session
+            self.workspace = workspace
         }
 
         func attach(table: NSTableView, scrollView: NSScrollView) {
@@ -209,67 +219,55 @@ struct LogTableView: NSViewRepresentable {
             let started = ContinuousClock.now
             defer { MainThreadProbe.recordUpdate(.now - started) }
             lastApply = started
-            let store = session.store
-            let count = store.count
-            // Rows evicted from the front (or cleared) since the last update. Measured
-            // before the shown state changes: it maps the table's current rows to the store.
-            let evicted = evictedSinceShown()
             let follow = (isFollowing && !isLiveScrolling) || scrollToBottomRequested
             let clip = scrollView.contentView
-            let topY = clip.bounds.minY + clip.contentInsets.top
-            let topRow = table.row(at: NSPoint(x: 0, y: max(0, topY)))
-            let topOffset = topRow >= 0 ? topY - table.rect(ofRow: topRow).minY : 0
-            let selectedRow = table.selectedRow
 
             isApplying = true
             defer {
                 isApplying = false
                 // Whatever the update did to the scroll position is ours, not the user's.
                 if let geometry { self.followTracker.recordOwnChange(geometry) }
+                recordTop(byUser: false)
+                appliedOriginY = clip.bounds.minY
             }
 
-            let previousCount = shownCount
-            shownCount = count
-            shownRemovedCount = store.removedCount
             appliedRevision = session.revision
+            let update = viewport.apply(session, following: follow)
+            let count = update.count
 
-            if evicted > 0 {
-                // Indices shifted: keep the same selected entry and the same entry at the top
-                // of the visible area (or the oldest, if it was evicted), then refresh the
-                // rows that have views (`reloadRowsWithViews`). `reloadData()` rebuilt every
-                // row view, ~5 ms per update while the budget evicts on every drain;
-                // `removeRows` at the front plus `insertRows` at the end kept the surviving
-                // views but cost ~4 ms per update with 800k rows.
-                if evicted >= previousCount || count == 0 {
-                    table.reloadData()
-                } else if count != previousCount {
-                    table.noteNumberOfRowsChanged()
+            // Indices shifted (rows added or removed at the front, or all replaced): the
+            // viewport says which row to select and which message to keep at the top; the
+            // rows that have views are refreshed (`reloadRowsWithViews`). `reloadData()`
+            // rebuilt every row view, ~5 ms per update while the budget evicts on every drain;
+            // `removeRows` at the front plus `insertRows` at the end kept the surviving views
+            // but cost ~4 ms per update with 800k rows. A reset replaced every row: reload.
+            switch update.reload {
+            case .all: table.reloadData()
+            case .numberOfRows: table.noteNumberOfRowsChanged()
+            case .none: break
+            }
+            switch update.selection {
+            case .keep:
+                break
+            case .select(let row):
+                table.selectRowIndexes([row], byExtendingSelection: false)
+            case .deselect(let clearDetail):
+                table.deselectAll(nil)
+                if clearDetail { onSelect(nil) }
+            }
+            if !follow, let target = update.scroll {
+                var y: CGFloat = 0
+                if case .row(let row, let offset) = target {
+                    y = table.rect(ofRow: row).minY + CGFloat(offset)
                 }
-                if selectedRow >= 0 {
-                    let newRow = selectedRow - evicted
-                    if newRow >= 0, newRow < count {
-                        table.selectRowIndexes([newRow], byExtendingSelection: false)
-                    } else {
-                        table.deselectAll(nil)
-                        onSelect(nil)
-                    }
-                }
-                if !follow, topRow >= 0, count > 0 {
-                    let newTop = topRow - evicted
-                    let y = newTop >= 0
-                        ? table.rect(ofRow: min(newTop, count - 1)).minY + topOffset
-                        : 0
-                    clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y - clip.contentInsets.top))
-                    scrollView.reflectScrolledClipView(clip)
-                }
-            } else if count != previousCount {
-                table.noteNumberOfRowsChanged()
+                clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y - clip.contentInsets.top))
+                scrollView.reflectScrolledClipView(clip)
             }
 
             if follow && count > 0 {
                 table.scrollRowToVisible(count - 1)
             }
-            if evicted > 0, evicted < previousCount, count > 0 {
+            if update.refreshRowsWithViews {
                 reloadRowsWithViews(in: table)
             }
             scrollToBottomRequested = false
@@ -288,19 +286,72 @@ struct LogTableView: NSViewRepresentable {
                 forRowIndexes: rows, columnIndexes: IndexSet(integersIn: 0..<table.numberOfColumns))
         }
 
-        /// How many of the table's rows have been evicted from the store since the last
-        /// update (0 while the table is current; `shownCount` after a clear). Row `r` of the
-        /// table is `store[r - evictedSinceShown()]`. O(1): entry ids restart with every
-        /// stream, so the store's removal counter is used instead.
-        private func evictedSinceShown() -> Int {
-            min(shownCount, max(0, session.store.removedCount - shownRemovedCount))
+        /// The entry the table's `row` shows, or nil (blank) if it is no longer a row.
+        private func entry(forRow row: Int) -> LogEntry? {
+            viewport.currentRow(forTableRow: row, in: session.rows).map { session.rows[$0] }
         }
 
-        /// The entry the table's `row` shows, or nil if it has been evicted since.
-        private func entry(forRow row: Int) -> LogEntry? {
-            let store = session.store
-            let index = row - evictedSinceShown()
-            return index >= 0 && index < store.count ? store[index] : nil
+        // MARK: Context menu and Copy
+
+        /// Copy, Copy Message, then Hide … and Show … items for the values of the row. The
+        /// table has already selected the row (through the normal selection path).
+        func menu(forRow row: Int) -> NSMenu? {
+            guard let entry = entry(forRow: row) else { return nil }
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            // A closure item, not `copy:` through the responder chain: a right-click does not
+            // make the table first responder, so another field's `copy:` could run instead.
+            let copy = ClosureMenuItem(title: "Copy") { [weak self] in self?.copySelectedRow() }
+            copy.keyEquivalent = "c"
+            copy.keyEquivalentModifierMask = .command
+            menu.addItem(copy)
+            menu.addItem(ClosureMenuItem(title: "Copy Message") { [weak self] in
+                self?.copy(RowCopy.message(of: entry))
+            })
+            let items = QuickFilterItems.items(for: entry)
+            for include in [false, true] where !items.isEmpty {
+                menu.addItem(.separator())
+                for item in items {
+                    let verb = include ? "Show" : "Hide"
+                    let title = "\(verb) \(item.condition.field.title) '\(item.menuValue)'"
+                    menu.addItem(ClosureMenuItem(title: title) { [weak self] in
+                        self?.addBubble(item.condition, include: include)
+                    })
+                }
+            }
+            return menu
+        }
+
+        func copySelectedRow() {
+            guard let table, table.selectedRow >= 0, let entry = entry(forRow: table.selectedRow)
+            else { return }
+            copy(RowCopy.line(for: entry, columns: LogColumn.defaultColumns))
+        }
+
+        private func copy(_ string: String) {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(string, forType: .string)
+        }
+
+        private func addBubble(_ condition: FilterCondition, include: Bool) {
+            let id = session.device.id
+            let bubbles = BubbleEditing.adding(
+                condition, include: include,
+                to: BubbleCodec.bubbles(from: workspace.state(for: id).expression))
+            workspace.setExpression(BubbleCodec.expression(from: bubbles), for: id)
+        }
+
+        /// Tells the viewport which message is at the top of the visible area.
+        private func recordTop(byUser: Bool) {
+            guard let table, let scrollView else { return }
+            let clip = scrollView.contentView
+            let topY = clip.bounds.minY + clip.contentInsets.top
+            let topRow = table.row(at: NSPoint(x: 0, y: max(0, topY)))
+            viewport.recordTop(
+                tableRow: topRow >= 0 ? topRow : nil,
+                offset: topRow >= 0 ? Double(topY - table.rect(ofRow: topRow).minY) : 0,
+                in: session.rows, byUser: byUser)
         }
 
         /// The clip view's current geometry, for `FollowTracker`.
@@ -345,11 +396,16 @@ struct LogTableView: NSViewRepresentable {
             } else {
                 followTracker.boundsChanged(geometry)
             }
+            // `apply` records the top once it is done.
+            if !isApplying {
+                let moved = appliedOriginY.map { abs($0 - geometry.originY) >= 0.5 } ?? true
+                recordTop(byUser: isLiveScrolling || moved)
+            }
         }
 
         // MARK: NSTableViewDataSource
 
-        func numberOfRows(in tableView: NSTableView) -> Int { shownCount }
+        func numberOfRows(in tableView: NSTableView) -> Int { viewport.shownCount }
 
         // MARK: NSTableViewDelegate
 
@@ -390,16 +446,63 @@ struct LogTableView: NSViewRepresentable {
         func tableViewSelectionDidChange(_ notification: Notification) {
             guard !isApplying, let table else { return }
             let row = table.selectedRow
-            if row >= 0, let entry = entry(forRow: row) {
+            switch viewport.userSelected(tableRow: row >= 0 ? row : nil, in: session.rows) {
+            case .entry(let current):
                 // Keep the selected row on screen instead of following new messages.
                 isFollowing = false
-                onSelect(entry)
-            } else {
-                if row >= 0 { table.deselectAll(nil) }
+                onSelect(session.rows[current])
+            case .cleared:
                 onSelect(nil)
+            case .ignored:
+                // A row replaced since the last update (blank): undo the click, keep the detail.
+                isApplying = true
+                table.deselectAll(nil)
+                isApplying = false
             }
         }
     }
+}
+
+// MARK: - Table
+
+/// Adds the row context menu (selecting the clicked row first) and ⌘C to `NSTableView`.
+final class LogNSTableView: NSTableView {
+    /// The menu for the clicked row (already selected), or nil for none.
+    var menuForRow: (Int) -> NSMenu? = { _ in nil }
+    /// Copies the selected row.
+    var copySelectedRow: () -> Void = {}
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = row(at: convert(event.locationInWindow, from: nil))
+        guard row >= 0 else { return nil }
+        if !selectedRowIndexes.contains(row) || selectedRowIndexes.count != 1 {
+            selectRowIndexes([row], byExtendingSelection: false)
+        }
+        return menuForRow(row)
+    }
+
+    @objc func copy(_ sender: Any?) { copySelectedRow() }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copy(_:)) { return selectedRow >= 0 }
+        return super.validateUserInterfaceItem(item)
+    }
+}
+
+/// A menu item that runs a closure.
+final class ClosureMenuItem: NSMenuItem {
+    private let handler: () -> Void
+
+    init(title: String, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: "")
+        target = self
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    @objc private func run() { handler() }
 }
 
 // MARK: - Split

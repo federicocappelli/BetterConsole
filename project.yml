@@ -36,6 +36,8 @@ targets:
         product: BCStreaming
       - package: BetterConsoleKit
         product: BCMobileDevice
+      - package: BetterConsoleKit
+        product: BCFilter
     settings:
       base:
         PRODUCT_NAME: BetterConsole
@@ -58,6 +60,11 @@ targets:
       # Pure App sources under test, compiled into the bundle (no app host, so no streaming).
       - path: App/LogView/LogTimestampFormatter.swift
       - path: App/LogView/FollowTracker.swift
+      - path: App/LogView/LogColumns.swift
+      - path: App/LogView/RowCopy.swift
+    dependencies:
+      - package: BetterConsoleKit
+        product: BCModel
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.betterconsole.BetterConsoleTests

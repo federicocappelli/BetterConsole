@@ -1,11 +1,18 @@
 import Foundation
 import Observation
+import Synchronization
+import BCFilter
 import BCModel
 import BCStore
 import BCTransport
 
 /// One device's log stream and store (spec §6.6). The transport is consumed off-main into a
-/// `BoundedBatchQueue`; a main-actor loop drains the queue into `store` every `drainInterval`.
+/// `BoundedBatchQueue` as it arrives, so a slow consumer drops and counts instead of buffering
+/// (MVP spec §6.5.1); a main-actor loop drains the queue into `store` every `drainInterval`.
+/// With a filter set, `rows` lists only the matching entries (spec §8): an off-main checker
+/// gives queued batches their verdicts (again after each filter change) and the drain only
+/// takes checked batches, so it never runs the filter on main; stored entries are rescanned in
+/// the background on each change.
 @MainActor
 @Observable
 public final class StreamSession {
@@ -21,10 +28,19 @@ public final class StreamSession {
     public let device: LogDevice
     public private(set) var state: State = .idle
     public let store: LogStore
+    /// What the log table shows: every stored entry, or only those matching `filter`.
+    public let rows: LogRows
+    public private(set) var filter: FilterExpression?
+    /// True while stored entries are being rescanned for a new filter.
+    public private(set) var isFiltering = false
+    /// Share of the rescan done, 0...1.
+    public private(set) var filterProgress: Double = 0
+    /// Distinct field values seen in drained entries, for filter suggestions.
+    @ObservationIgnored public private(set) var seenValues = SeenValues()
     /// Entries dropped by the bounded queue since the last `clear()`.
     public private(set) var droppedCount = 0
-    /// Bumps on every drain that appended entries, on `clear()`, and whenever the memory budget
-    /// evicts entries from `store`.
+    /// Bumps on every drain that appended entries, on `clear()`, whenever the memory budget
+    /// evicts entries from `store`, and whenever `rows` changes (filter change, rescan step).
     public private(set) var revision = 0
     /// Id given to the next stored entry. Never reset (not by pause, start, retry, auto-resume
     /// or `clear()`), so ids are unique and increasing for the session's lifetime.
@@ -36,15 +52,20 @@ public final class StreamSession {
     @ObservationIgnored private let transport: (any LogTransport)?
     @ObservationIgnored private let budget: MemoryBudget
     @ObservationIgnored private let drainInterval: Duration
-    @ObservationIgnored private let queueCapacity: Int
     /// Most entries applied per drain tick, so one tick after a main-thread stall stays cheap.
     static let maxEntriesPerDrain = 20_000
 
     // One generation per started stream. A consumer only reports back while its generation is
     // current, so streams the session cancelled (pause, disconnect, restart) never fail it.
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var queue: BoundedBatchQueue?
+    /// Lives as long as the session: entries a stopped stream left unchecked are still
+    /// checked and drained after it stops.
+    @ObservationIgnored let queue: BoundedBatchQueue
+    /// The running stream's way into `queue`; closed when the session stops the stream.
+    @ObservationIgnored private var inlet: StreamInlet?
     @ObservationIgnored private var consumer: Task<Void, Never>?
+    @ObservationIgnored private var checker: Task<Void, Never>?
+    /// Runs while streaming and afterwards until the queue is empty.
     @ObservationIgnored private var drainLoop: Task<Void, Never>?
     /// Held while streaming. Without it App Nap throttles a hidden or covered app: decoding
     /// fell from ~20k to ~7k msgs/s and the drain from 10 to ~4 updates/s (Task 11).
@@ -54,6 +75,19 @@ public final class StreamSession {
     /// present. A disappearance while set means the failure was the disconnect itself.
     @ObservationIgnored var failedSinceDeviceSeen = false
 
+    // MARK: Filtering state
+    @ObservationIgnored let filterSlot = FilterSlot()
+    @ObservationIgnored private var rescanTask: Task<Void, Never>?
+    /// Rescan tasks not yet finished, cancelled ones included (for tests).
+    @ObservationIgnored private(set) var runningRescans = 0
+    /// Largest rescan chunk; the chunk shrinks below it while copying one takes over 4 ms.
+    @ObservationIgnored var maxRescanChunk = 10_000
+    @ObservationIgnored private var rescanChunk = 10_000
+    /// Called after each rescan chunk is copied from the store, before it is evaluated (tests).
+    @ObservationIgnored var afterRescanCopy: (() -> Void)?
+    static let rescanCopyBudget = Duration.milliseconds(4)
+    static let minRescanChunk = 500
+
     public init(
         device: LogDevice, transport: (any LogTransport)?, budget: MemoryBudget,
         drainInterval: Duration = .milliseconds(100), queueCapacity: Int = 200_000
@@ -62,13 +96,23 @@ public final class StreamSession {
         self.transport = transport
         self.budget = budget
         self.drainInterval = drainInterval
-        self.queueCapacity = queueCapacity
+        queue = BoundedBatchQueue(capacity: queueCapacity)
         let store = RingBufferLogStore()
         self.store = store
-        budget.register(store) { [weak self] in self?.revision += 1 }
+        rows = LogRows(store: store)
+        budget.register(store) { [weak self] in
+            guard let self else { return }
+            rows.dropEvicted()
+            revision += 1
+        }
+        checker = Task.detached(priority: .userInitiated) { [queue, filterSlot] in
+            await Self.runChecker(queue: queue, slot: filterSlot)
+        }
     }
 
     isolated deinit {
+        rescanTask?.cancel()
+        checker?.cancel()
         consumer?.cancel()
         drainLoop?.cancel()
         if let appNapActivity { ProcessInfo.processInfo.endActivity(appNapActivity) }
@@ -103,10 +147,12 @@ public final class StreamSession {
         }
     }
 
-    /// Empties the store and resets `droppedCount`; the state is unchanged.
+    /// Empties the store and resets `droppedCount`; the state and filter are unchanged. A
+    /// running rescan finds nothing left to add.
     public func clear() {
-        _ = queue?.drain()
+        queue.removeAll()
         store.removeAll()
+        rows.clear()
         droppedCount = 0
         revision += 1
     }
@@ -159,8 +205,8 @@ public final class StreamSession {
         stop()  // defensive: never two consumers
         generation += 1
         let gen = generation
-        let queue = BoundedBatchQueue(capacity: queueCapacity)
-        self.queue = queue
+        let inlet = StreamInlet(queue: queue)
+        self.inlet = inlet
         state = .streaming
         appNapActivity = ProcessInfo.processInfo.beginActivity(
             options: .userInitiatedAllowingIdleSystemSleep, reason: "Streaming logs")
@@ -169,7 +215,9 @@ public final class StreamSession {
         consumer = Task.detached { [weak self] in
             var reason: String?
             do {
-                for try await batch in stream { queue.push(batch) }
+                // Unchecked and at once: checking here would let a slow filter back batches up
+                // in the transport's unbounded buffer, uncounted.
+                for try await entries in stream { inlet.push(entries) }
                 reason = "The log stream ended unexpectedly."
             } catch {
                 reason = String(describing: error)
@@ -178,25 +226,38 @@ public final class StreamSession {
             await self?.streamEnded(generation: gen, reason: reason ?? "")
         }
 
+        startDrainLoop()
+    }
+
+    private func startDrainLoop() {
+        guard drainLoop == nil else { return }
         let interval = drainInterval
         drainLoop = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: interval)
                 guard !Task.isCancelled, let self else { return }
                 self.drain(max: Self.maxEntriesPerDrain)
+                if self.state != .streaming, self.queue.count == 0 {
+                    self.drainLoop = nil
+                    return
+                }
             }
         }
     }
 
-    /// Cancels the stream and drain loop, keeping everything already received.
+    /// Cancels the stream, keeping everything already received: what is checked (or, with no
+    /// filter, everything) is drained now, the rest by the drain loop once checked.
     private func stop() {
         generation += 1
+        inlet?.close()  // late pushes from the cancelled consumer go nowhere
+        inlet = nil
         consumer?.cancel()
         consumer = nil
-        drainLoop?.cancel()
-        drainLoop = nil
-        drain(max: .max)  // keep everything already received
-        queue = nil  // late pushes from the cancelled consumer go nowhere
+        drain(max: .max)
+        if queue.count == 0 {
+            drainLoop?.cancel()
+            drainLoop = nil
+        }
         if let appNapActivity {
             ProcessInfo.processInfo.endActivity(appNapActivity)
             self.appNapActivity = nil
@@ -210,18 +271,202 @@ public final class StreamSession {
         failedSinceDeviceSeen = true
     }
 
+    /// Appends up to `max` queued entries to the store. With a filter set, only batches the
+    /// checker has judged against the current filter are taken (the rest wait in the queue),
+    /// so the filter itself never runs here.
     private func drain(max: Int) {
-        guard let queue else { return }
-        var (entries, dropped) = queue.drain(max: max)
+        let (filterGeneration, filter) = filterSlot.current()
+        let filtered = filter != nil && rows.isFiltered
+        var (batches, dropped) = queue.drain(
+            max: max, checkedAgainst: filtered ? filterGeneration : nil)
         if dropped > 0 { droppedCount += dropped }
-        guard !entries.isEmpty else { return }
-        // Each stream's decoder numbers from 1; re-stamp so ids increase across streams. In
-        // place: copying every entry here was a visible share of the main thread at 20k/s.
-        let firstID = nextEntryID
-        nextEntryID += UInt64(entries.count)
-        for i in entries.indices { entries[i].setID(firstID + UInt64(i)) }
-        store.append(contentsOf: entries)
+        guard !batches.isEmpty else { return }
+        var position = store.removedCount + store.count
+        for b in batches.indices {
+            // Each stream's decoder numbers from 1; re-stamp so ids increase across streams. In
+            // place: copying every entry here was a visible share of the main thread at 20k/s.
+            let firstID = nextEntryID
+            nextEntryID += UInt64(batches[b].entries.count)
+            for i in batches[b].entries.indices {
+                batches[b].entries[i].setID(firstID + UInt64(i))
+                seenValues.insert(batches[b].entries[i])
+            }
+            if filtered, let matches = batches[b].matches {
+                for i in matches.indices where matches[i] { rows.appendLive(position + i) }
+            }
+            position += batches[b].entries.count
+            store.append(contentsOf: batches[b].entries)
+        }
         revision += 1
         budget.enforce()
     }
+
+    // MARK: Filtering
+
+    /// Shows only entries matching `expression` (nil: everything). Stored entries are rescanned
+    /// in the background, newest first; a newer change cancels the running rescan.
+    public func setFilter(_ expression: FilterExpression?) {
+        guard expression != filter else { return }
+        filter = expression
+        rescanTask?.cancel()
+        rescanTask = nil
+        let compiled = CompiledFilter(expression)
+        guard !compiled.matchesEverything else {
+            filterSlot.set(nil)
+            rows.installUnfiltered()
+            queue.wake()
+            revision += 1
+            isFiltering = false
+            filterProgress = 1
+            return
+        }
+        revision += 1
+        let filterGeneration = filterSlot.set(compiled)
+        queue.wake()  // queued verdicts are stale: check them against this filter
+        rows.installFiltered(MatchIndex())
+        let low = store.removedCount
+        let boundary = low + store.count  // entries from here on are indexed by the drain
+        guard boundary > low else {
+            isFiltering = false
+            filterProgress = 1
+            return
+        }
+        isFiltering = true
+        filterProgress = 0
+        rescanChunk = maxRescanChunk
+        runningRescans += 1
+        rescanTask = Task { [weak self] in
+            defer { self?.runningRescans -= 1 }
+            var cursor = boundary  // positions below it are still to scan
+            while true {
+                guard !Task.isCancelled,
+                      let chunk = self?.takeRescanChunk(below: &cursor, generation: filterGeneration)
+                else { return }
+                guard let matches = await Self.evaluate(chunk, filter: compiled),
+                      !Task.isCancelled, let self
+                else { return }
+                self.publishRescan(
+                    matches, generation: filterGeneration,
+                    progress: Double(boundary - cursor) / Double(boundary - low))
+            }
+        }
+    }
+
+    /// Off-main, for the session's lifetime: gives queued batches their verdicts against the
+    /// current filter, oldest first, and again whenever the filter changes. Idle without a
+    /// filter (the drain then takes batches unchecked). A batch whose filter changes mid-check
+    /// is abandoned and checked again; with a regex that is noticed at the next entry.
+    nonisolated private static func runChecker(queue: BoundedBatchQueue, slot: FilterSlot) async {
+        var wakeups = queue.wakeups.makeAsyncIterator()
+        while !Task.isCancelled {
+            let (generation, filter) = slot.current()
+            if let filter, let job = queue.nextToCheck(against: generation) {
+                let checkEvery = filter.containsRegex ? 1 : 1_000
+                var matches: [Bool] = []
+                matches.reserveCapacity(job.entries.count)
+                var sinceCheck = 0
+                var stale = false
+                for entry in job.entries {
+                    sinceCheck += 1
+                    if sinceCheck == checkEvery {
+                        sinceCheck = 0
+                        if Task.isCancelled || slot.current().0 != generation {
+                            stale = true
+                            break
+                        }
+                    }
+                    matches.append(filter.matches(entry))
+                }
+                if !stale {
+                    queue.completeCheck(id: job.id, matches: matches, generation: generation)
+                }
+                continue
+            }
+            guard await wakeups.next() != nil else { return }
+        }
+    }
+
+    /// Main-actor step: copies the next chunk below `cursor` (newest first) and moves the
+    /// cursor down. Returns nil, ending the rescan, when nothing is left above the evicted part.
+    private func takeRescanChunk(
+        below cursor: inout Int, generation: UInt64
+    ) -> (entries: [LogEntry], firstPosition: Int)? {
+        guard filterSlot.current().0 == generation else { return nil }
+        let removed = store.removedCount
+        guard cursor > removed else {
+            isFiltering = false
+            filterProgress = 1
+            rescanTask = nil
+            return nil
+        }
+        let first = Swift.max(removed, cursor - rescanChunk)
+        let clock = ContinuousClock()
+        let started = clock.now
+        var entries: [LogEntry] = []
+        entries.reserveCapacity(cursor - first)
+        for p in first..<cursor { entries.append(store[p - removed]) }
+        let elapsed = clock.now - started
+        if elapsed > Self.rescanCopyBudget {
+            rescanChunk = Swift.max(Self.minRescanChunk, rescanChunk / 2)
+        } else if elapsed < Self.rescanCopyBudget / 4 {
+            rescanChunk = Swift.min(maxRescanChunk, rescanChunk * 2)
+        }
+        cursor = first
+        afterRescanCopy?()
+        return (entries, first)
+    }
+
+    /// Off-main: the positions of `chunk`'s matching entries, newest first, or nil once
+    /// cancelled. Checks for cancellation before every entry when the filter has a regex
+    /// (one entry can take seconds), every 1,000 entries otherwise.
+    nonisolated private static func evaluate(
+        _ chunk: (entries: [LogEntry], firstPosition: Int), filter: CompiledFilter
+    ) async -> [Int]? {
+        let checkEvery = filter.containsRegex ? 1 : 1_000
+        let work = Task.detached(priority: .userInitiated) { () -> [Int]? in
+            var positions: [Int] = []
+            var sinceCheck = checkEvery
+            for i in chunk.entries.indices.reversed() {
+                if sinceCheck == checkEvery {
+                    if Task.isCancelled { return nil }
+                    sinceCheck = 0
+                }
+                sinceCheck += 1
+                if filter.matches(chunk.entries[i]) { positions.append(chunk.firstPosition + i) }
+            }
+            return positions
+        }
+        return await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
+    }
+
+    /// Main-actor step: adds a chunk's matches below the current rows, minus any the store
+    /// evicted (or cleared) while the chunk was being checked.
+    private func publishRescan(_ positionsNewestFirst: [Int], generation: UInt64, progress: Double) {
+        guard filterSlot.current().0 == generation else { return }
+        let removed = store.removedCount
+        rows.prependRescan(Array(positionsNewestFirst.prefix { $0 >= removed }))
+        filterProgress = progress
+        revision += 1
+    }
+}
+
+/// A stream's way into the session's queue. Closing it, under its lock, guarantees no push
+/// from that stream lands afterwards, even one already past the stream's last check.
+private final class StreamInlet: Sendable {
+    private let queue: BoundedBatchQueue
+    private let isOpen = Mutex(true)
+
+    init(queue: BoundedBatchQueue) { self.queue = queue }
+
+    func push(_ entries: [LogEntry]) {
+        isOpen.withLock { open in
+            if open { queue.push(TaggedBatch(unchecked: entries)) }
+        }
+    }
+
+    func close() { isOpen.withLock { $0 = false } }
 }

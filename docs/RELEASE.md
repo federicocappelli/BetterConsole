@@ -51,6 +51,26 @@ and draws, but the figures exclude compositing. To check the budget, set it befo
 (`defaults write app.betterconsole.BetterConsole maxLogMemoryGB -float 0.5`) and delete it
 afterwards (`defaults delete app.betterconsole.BetterConsole maxLogMemoryGB`).
 
+Filtered run: the same, with `BETTERCONSOLE_PROBE_FILTER=<file>` set to a filter exported
+from the app (filter bar, Export…). The app applies it to this Mac's session before streaming
+and the session line in the probe output says `filter applied, N rows shown` (a file that can't
+be read is ignored silently and the line then says `no filter`, so check it). Compare the
+figures with an unfiltered run of the same build. Pass criterion for a filtered run: no new
+blocks over 16 ms compared with the unfiltered baseline on the same machine (measured at
+25,000 msg/s on the development Mac, Release: both runs show 27-49 iterations over 16 ms per
+5 s window with the longest 22-50 ms, so the absolute "no iteration over 16 ms" line is not
+met even unfiltered; a filter matching half the flood raised the count by ~10 per window and the
+longest table update from 2.8 to ~9 ms once the store was full).
+
+```sh
+BETTERCONSOLE_PROBE=$TMPDIR/probe.txt BETTERCONSOLE_PROBE_FILTER=$TMPDIR/filter.json \
+  build/release/Build/Products/Release/BetterConsole.app/Contents/MacOS/BetterConsole &
+```
+
+The speed targets of the filters (rescan of 800,000 entries within 1 s, longest main-actor
+step under 4 ms, live checking under 3,700 ns/entry) are checked by
+`BC_PERF=1 swift test -c release --package-path Packages/BetterConsoleKit --filter FilterPerformanceTests`.
+
 For hotspots, attach Instruments while the flood runs:
 
 ```sh

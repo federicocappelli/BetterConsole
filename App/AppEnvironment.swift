@@ -1,4 +1,5 @@
 import Foundation
+import BCFilter
 import BCMobileDevice
 import BCStore
 import BCStreaming
@@ -9,11 +10,20 @@ import BCTransport
 final class AppEnvironment {
     let budget: MemoryBudget
     let registry: SessionRegistry
+    let library: FilterLibrary
+    let workspace: FilterWorkspace
     private var discoveryTask: Task<Void, Never>?
 
-    init(budget: MemoryBudget, registry: SessionRegistry) {
+    init(
+        budget: MemoryBudget, registry: SessionRegistry,
+        library: FilterLibrary, workspace: FilterWorkspace
+    ) {
         self.budget = budget
         self.registry = registry
+        self.library = library
+        self.workspace = workspace
+        // Sessions start with their device's filter; workspace changes reach live sessions.
+        connect(registry: registry, workspace: workspace)
     }
 
     /// Starts device discovery for the app's lifetime. Idempotent.
@@ -45,22 +55,36 @@ final class AppEnvironment {
             sessions: {
                 registry.rows.compactMap { row in
                     registry.session(for: row.id).map {
-                        "\(row.device.name) [\(row.id)]: \($0.state), \($0.appendedCount) received"
+                        "\(row.device.name) [\(row.id)]: \($0.state), \($0.appendedCount) received, "
+                            + ($0.filter == nil ? "no filter" : "filter applied, \($0.rows.count) rows shown")
                     }
                 }
             })
         else { return }
+        let probeFilter = Self.probeFilter()
         let all = ProcessInfo.processInfo.environment["BETTERCONSOLE_PROBE_DEVICES"] == "all"
         Task {
             for _ in 0..<100 {
                 for row in registry.rows where all ? row.isAvailable : row.id == "local" {
                     if let session = registry.session(for: row.id), session.state == .idle {
+                        if row.id == "local", let probeFilter {
+                            session.setFilter(probeFilter.expression)
+                        }
                         session.start()
                     }
                 }
                 try? await Task.sleep(for: .milliseconds(100))
             }
         }
+    }
+
+    /// With `BETTERCONSOLE_PROBE_FILTER=<exported filter file>`: the filter to apply to the
+    /// `local` session before the probe starts streaming it.
+    private static func probeFilter() -> SavedFilter? {
+        guard let path = ProcessInfo.processInfo.environment["BETTERCONSOLE_PROBE_FILTER"],
+            let data = FileManager.default.contents(atPath: path)
+        else { return nil }
+        return try? FilterFile.decode(data)
     }
 
     #if DEBUG
@@ -90,6 +114,18 @@ final class AppEnvironment {
                 MobileDeviceLogTransport(),
             ],
             budget: budget)
-        return AppEnvironment(budget: budget, registry: registry)
+        let library = FilterLibrary(storage: FileFilterLibraryStorage(directory: libraryDirectory()))
+        let workspace = FilterWorkspace(
+            library: library, persistence: UserDefaultsDeviceFilterPersistence())
+        return AppEnvironment(
+            budget: budget, registry: registry, library: library, workspace: workspace)
+    }
+
+    /// `~/Library/Application Support/BetterConsole/`, created if missing.
+    private static func libraryDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let directory = base.appendingPathComponent("BetterConsole", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
     }
 }

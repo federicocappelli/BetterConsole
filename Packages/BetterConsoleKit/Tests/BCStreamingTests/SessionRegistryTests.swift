@@ -78,6 +78,17 @@ final class SessionRegistryTests {
         #expect(transport.callCount == 0)
     }
 
+    @Test func registryHookCalledOnCreate() async {
+        var seen: [(id: LogDevice.ID, state: StreamSession.State)] = []
+        registry.onSessionCreated = { seen.append(($0.device.id, $0.state)) }
+        await push([mac, simA])
+        await push([mac, simA, simB])  // only simB is new
+        let ids = seen.map(\.id).filter { !$0.hasPrefix("zz-marker") }
+        #expect(ids.sorted() == ["local", "sim-a", "sim-b"])
+        #expect(seen.allSatisfy { $0.state == .idle })
+        #expect(registry.session(for: simB.id) != nil)
+    }
+
     /// `session(for:)` never creates anything: every discovered device already has a session
     /// after the update, and lookups of unknown ids leave no trace.
     @Test func sessionLookupIsPure() async {

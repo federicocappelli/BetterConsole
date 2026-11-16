@@ -1,12 +1,13 @@
 import Foundation
 import Synchronization
 import BCModel
+import BCFilter
 import BCTransport
 
-func makeEntry(_ id: UInt64, message: String = "m") -> LogEntry {
+func makeEntry(_ id: UInt64, message: String = "m", process: String = "proc") -> LogEntry {
     LogEntry(
         id: id, date: Date(timeIntervalSince1970: Double(id)), level: .default,
-        eventType: "logEvent", process: "proc", message: message)
+        eventType: "logEvent", process: process, message: message)
 }
 
 func makeEntries(_ range: Range<UInt64>) -> [LogEntry] { range.map { makeEntry($0) } }
@@ -93,4 +94,20 @@ func eventually(
         try? await Task.sleep(for: .milliseconds(1))
     }
     return condition()
+}
+
+/// Filter library storage in memory; share one between libraries to model a relaunch.
+final class MemoryLibraryStorage: FilterLibraryStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var data: Data?
+    func load() throws -> Data? { lock.withLock { data } }
+    func save(_ data: Data) throws { lock.withLock { self.data = data } }
+    func moveAside() throws { lock.withLock { data = nil } }
+}
+
+/// Per-device filter states in memory; share one between workspaces to model a relaunch.
+final class MemoryDeviceFilters: DeviceFilterPersistence {
+    var stored: [String: DeviceFilterState] = [:]
+    func load() -> [String: DeviceFilterState] { stored }
+    func save(_ states: [String: DeviceFilterState]) { stored = states }
 }

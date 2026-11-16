@@ -26,6 +26,10 @@ public final class SessionRegistry {
         return result.sorted(by: Self.order)
     }
 
+    /// Called once for each new session, right after it is created and before it can start
+    /// (for example to restore the device's saved filter).
+    @ObservationIgnored public var onSessionCreated: (@MainActor (StreamSession) -> Void)?
+
     @ObservationIgnored private let discoveries: [any DeviceDiscovery]
     @ObservationIgnored private let transports: [any LogTransport]
     @ObservationIgnored private let budget: MemoryBudget
@@ -92,9 +96,11 @@ public final class SessionRegistry {
         present = merged
 
         for (id, device) in merged where sessions[id] == nil {
-            sessions[id] = StreamSession(
+            let session = StreamSession(
                 device: device, transport: transports.first { $0.supports(device) },
                 budget: budget, drainInterval: drainInterval)
+            sessions[id] = session
+            onSessionCreated?(session)
         }
 
         // This discovery has seen these devices since any earlier failure.

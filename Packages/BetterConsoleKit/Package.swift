@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "BCStore", targets: ["BCStore"]),
         .library(name: "BCStreaming", targets: ["BCStreaming"]),
         .library(name: "BCMobileDevice", targets: ["BCMobileDevice"]),
+        .library(name: "BCFilter", targets: ["BCFilter"]),
     ],
     targets: [
         .target(name: "BCModel"),
@@ -37,11 +38,11 @@ let package = Package(
         ),
         .target(
             name: "BCStreaming",
-            dependencies: ["BCModel", "BCStore", "BCTransport"]
+            dependencies: ["BCModel", "BCStore", "BCTransport", "BCFilter"]
         ),
         .testTarget(
             name: "BCStreamingTests",
-            dependencies: ["BCStreaming", "BCModel", "BCStore", "BCTransport"]
+            dependencies: ["BCStreaming", "BCModel", "BCStore", "BCTransport", "BCFilter"]
         ),
         // The only module that touches Apple's private MobileDevice.framework (dlopen'd at
         // runtime, never linked), so the physical-device transport can be swapped out.
@@ -53,6 +54,14 @@ let package = Package(
             name: "BCMobileDeviceTests",
             dependencies: ["BCMobileDevice", "BCModel", "BCTransport"],
             resources: [.copy("Fixtures")]
+        ),
+        .target(
+            name: "BCFilter",
+            dependencies: ["BCModel"]
+        ),
+        .testTarget(
+            name: "BCFilterTests",
+            dependencies: ["BCFilter", "BCModel"]
         ),
     ],
     swiftLanguageModes: [.v6]
