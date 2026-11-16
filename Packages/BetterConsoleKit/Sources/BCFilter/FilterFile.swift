@@ -95,11 +95,15 @@ public enum FilterFile {
         let root: Any
         do { root = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) }
         catch { throw .notJSON }
-        guard let object = root as? [String: Any], object["format"] as? String == format else {
-            throw .wrongFormat
+        guard let object = root as? [String: Any] else { throw .wrongFormat }
+        // `format`, `version` and `id` may be left out of a hand-edited file: a missing format
+        // or version reads as this one, a missing id gets a new one. When present they are
+        // still checked. `name` and `expression` are always required.
+        if let f = object["format"], f as? String != format { throw .wrongFormat }
+        if let rawVersion = object["version"] {
+            guard let v = rawVersion as? Int, v >= 1 else { throw .wrongFormat }
+            if v > version { throw .newerVersion(v) }
         }
-        guard let v = object["version"] as? Int, v >= 1 else { throw .wrongFormat }
-        if v > version { throw .newerVersion(v) }
         guard let name = object["name"] as? String,
               !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { throw .missingName }

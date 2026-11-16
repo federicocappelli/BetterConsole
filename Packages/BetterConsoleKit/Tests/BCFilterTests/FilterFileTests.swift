@@ -8,12 +8,14 @@ import Testing
     }
 
     private func file(
-        format: String = "betterconsole.filter", version: Int = 1,
+        format: String? = "betterconsole.filter", version: Int? = 1,
         id: String? = "6F1C2B3A-0000-4000-8000-000000000001", name: String? = "DDG Errors",
         expression: String? = #"{"condition":{"field":"process","match":"is","value":"X"}}"#,
         extra: String = ""
     ) -> Data {
-        var parts = [#""format":"\#(format)""#, #""version":\#(version)"#]
+        var parts: [String] = []
+        if let format { parts.append(#""format":"\#(format)""#) }
+        if let version { parts.append(#""version":\#(version)"#) }
         if let id { parts.append(#""id":"\#(id)""#) }
         if let name { parts.append(#""name":"\#(name)""#) }
         if let expression { parts.append(#""expression":\#(expression)"#) }
@@ -207,5 +209,31 @@ import Testing
         let malformed = try FilterFile.decode(file(id: "not-a-uuid"))
         #expect(missing.id != malformed.id)
         #expect(missing.name == "DDG Errors")
+    }
+
+    /// A hand-edited export with format, version and id removed still imports; name and
+    /// expression stay required, and a format or version that is present is still checked.
+    @Test func formatVersionAndIDAreOptional() throws {
+        let bare = try FilterFile.decode(file(format: nil, version: nil, id: nil))
+        #expect(bare.name == "DDG Errors")
+        #expect(bare.expression == cond(.process, .is, "X"))
+        let other = try FilterFile.decode(file(format: nil, version: nil, id: nil))
+        #expect(bare.id != other.id)
+
+        #expect(throws: FilterImportError.missingName) {
+            try FilterFile.decode(file(format: nil, version: nil, id: nil, name: nil))
+        }
+        #expect(throws: FilterImportError.missingExpression) {
+            try FilterFile.decode(file(format: nil, version: nil, id: nil, expression: nil))
+        }
+        #expect(throws: FilterImportError.unknownField("zone")) {
+            try FilterFile.decode(file(
+                format: nil, version: nil, id: nil, expression: conditionJSON("zone", "is", "X")))
+        }
+        #expect(throws: FilterImportError.wrongFormat) { try FilterFile.decode(file(format: "other", version: nil)) }
+        #expect(throws: FilterImportError.newerVersion(2)) { try FilterFile.decode(file(format: nil, version: 2)) }
+        #expect(throws: FilterImportError.wrongFormat) {
+            try FilterFile.decode(Data(#"{"version":"one","name":"N","expression":{"all":[]}}"#.utf8))
+        }
     }
 }
