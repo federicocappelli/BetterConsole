@@ -1,8 +1,10 @@
 import Foundation
 import BCModel
 
-/// One global memory budget shared by all device stores. Evicts the oldest entries across all
-/// registered stores until the total estimated size fits `limitBytes`.
+/// One global memory budget shared by all device stores. Evicts the oldest entries until the
+/// total estimated size fits `limitBytes`: first across live stores, and only once no live
+/// store has entries left, across opened files' stores (`isFile`), so a file of older logs is
+/// not emptied by live streaming.
 @MainActor
 public final class MemoryBudget {
     public static let defaultLimit = 4 * 1024 * 1024 * 1024
@@ -10,6 +12,7 @@ public final class MemoryBudget {
 
     private struct WeakStore {
         weak var store: LogStore?
+        let isFile: Bool
         let onEvict: @MainActor () -> Void
     }
     private var stores: [WeakStore] = []
@@ -23,11 +26,14 @@ public final class MemoryBudget {
         self.limitBytes = limitBytes
     }
 
-    /// Registers `store`; `onEvict` is called once per `enforce()` pass that removed entries
-    /// from it, after the pass. Re-registering a store replaces its callback.
-    public func register(_ store: LogStore, onEvict: @escaping @MainActor () -> Void = {}) {
+    /// Registers `store` (`isFile`: an opened file's, evicted only after every live store);
+    /// `onEvict` is called once per `enforce()` pass that removed entries from it, after the
+    /// pass. Re-registering a store replaces its callback.
+    public func register(
+        _ store: LogStore, isFile: Bool = false, onEvict: @escaping @MainActor () -> Void = {}
+    ) {
         stores.removeAll { $0.store == nil || $0.store === store }
-        stores.append(WeakStore(store: store, onEvict: onEvict))
+        stores.append(WeakStore(store: store, isFile: isFile, onEvict: onEvict))
     }
 
     public func unregister(_ store: LogStore) {
@@ -37,8 +43,9 @@ public final class MemoryBudget {
     /// Cheap when under the limit: one sum over the registered stores.
     public func enforce() {
         stores.removeAll { $0.store == nil }
-        var live = stores.compactMap(\.store)
-        var total = live.reduce(0) { $0 + $1.estimatedBytes }
+        var live = stores.filter { !$0.isFile }.compactMap(\.store)
+        var files = stores.filter(\.isFile).compactMap(\.store)
+        var total = (live + files).reduce(0) { $0 + $1.estimatedBytes }
         guard total > limitBytes else { return }
         var evicted: Set<ObjectIdentifier> = []
         defer {
@@ -50,11 +57,13 @@ public final class MemoryBudget {
         }
 
         while total > limitBytes {
-            // Find the store with the oldest entry and the next-oldest date among the others.
+            // Among live stores with entries (files once none has any): the store with the
+            // oldest entry and the next-oldest date among the others.
+            let candidates = live.contains { $0.count > 0 } ? live : files
             var victim: LogStore?
             var victimDate = Date.distantFuture
             var nextDate = Date.distantFuture
-            for store in live {
+            for store in candidates {
                 guard let d = store.oldestDate else { continue }
                 if d < victimDate {
                     nextDate = victimDate
@@ -75,7 +84,10 @@ public final class MemoryBudget {
             victim.removeOldest(n)
             evicted.insert(ObjectIdentifier(victim))
             total -= before - victim.estimatedBytes
-            if victim.count == 0 { live.removeAll { $0 === victim } }
+            if victim.count == 0 {
+                live.removeAll { $0 === victim }
+                files.removeAll { $0 === victim }
+            }
         }
     }
 }

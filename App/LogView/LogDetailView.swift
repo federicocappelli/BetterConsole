@@ -2,18 +2,35 @@ import SwiftUI
 import BCModel
 
 /// The lower pane: the selected entry's full message, then every non-nil field and each
-/// `extra` key (sorted). All text is selectable.
+/// `extra` key (sorted). All text is selectable. With several rows selected, their count.
 struct LogDetailView: View, Equatable {
-    let entry: LogEntry?
+    enum Content: Equatable {
+        case none
+        case entry(LogEntry)
+        /// Several rows are selected.
+        case several(Int)
 
-    /// Entries are immutable, so their key decides redraws; the pane is not rebuilt on every
-    /// table update.
+        /// Entries are immutable, so their key decides equality.
+        nonisolated static func == (lhs: Content, rhs: Content) -> Bool {
+            switch (lhs, rhs) {
+            case (.none, .none): true
+            case (.entry(let a), .entry(let b)): EntryKey(a) == EntryKey(b)
+            case (.several(let a), .several(let b)): a == b
+            default: false
+            }
+        }
+    }
+
+    let content: Content
+
+    /// Content decides redraws; the pane is not rebuilt on every table update.
     nonisolated static func == (lhs: LogDetailView, rhs: LogDetailView) -> Bool {
-        lhs.entry.map(EntryKey.init) == rhs.entry.map(EntryKey.init)
+        lhs.content == rhs.content
     }
 
     var body: some View {
-        if let entry {
+        switch content {
+        case .entry(let entry):
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(entry.message)
@@ -38,7 +55,12 @@ struct LogDetailView: View, Equatable {
                 .textSelection(.enabled)
             }
             .background(.background)
-        } else {
+        case .several(let count):
+            Text("\(count.formatted()) messages selected")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.background)
+        case .none:
             Text("Select a message to see its details")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "BCStreaming", targets: ["BCStreaming"]),
         .library(name: "BCMobileDevice", targets: ["BCMobileDevice"]),
         .library(name: "BCFilter", targets: ["BCFilter"]),
+        .library(name: "BCFiles", targets: ["BCFiles"]),
     ],
     targets: [
         .target(name: "BCModel"),
@@ -62,6 +63,17 @@ let package = Package(
         .testTarget(
             name: "BCFilterTests",
             dependencies: ["BCFilter", "BCModel"]
+        ),
+        // Log files: the BetterConsole .log format (Save Logs) and a best-effort parser for
+        // other text logs, plus the transport that reads a file into a session.
+        .target(
+            name: "BCFiles",
+            dependencies: ["BCModel", "BCTransport"]
+        ),
+        .testTarget(
+            name: "BCFilesTests",
+            dependencies: ["BCFiles", "BCModel", "BCTransport"],
+            resources: [.copy("Fixtures")]
         ),
     ],
     swiftLanguageModes: [.v6]

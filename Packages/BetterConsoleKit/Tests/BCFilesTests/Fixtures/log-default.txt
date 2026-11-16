@@ -1,0 +1,11 @@
+Timestamp                       Thread     Type        Activity             PID    TTL  
+2026-11-16 22:42:59.699132+0000 0x34d15    Info        0x0                  717    0    exchangesyncd: (libusrtcp.dylib) [com.apple.network:] tcp_run_timerlist mode 1 drift 72 / offset 10
+2026-11-16 22:42:59.699263+0000 0x34bdf    Default     0x0                  554    0    searchpartyd: (LocalAuthentication) [com.apple.LocalAuthentication:Client,LAContext] LAContext[4:14:206] deallocated
+2026-11-16 22:42:59.699267+0000 0x34c56    Default     0x0                  554    0    searchpartyd: [com.apple.icloud.searchpartyd:meDevice] In progress fetch task started.
+2026-11-16 22:43:03.498670+0000 0x336be    Default     0x0                  0      0    kernel: arm_cpu_init(): cpu 4 online
+2026-11-16 22:43:03.549167+0100 0x31550    Error       0x0                  0      0    kernel: (Sandbox) Sandbox: logd_helper(422) deny(1) file-read-data /private/var/tmp/x
+2026-11-16 22:42:53.193167+0000 0x27f68    Activity    0x130e33             427    0    runningboardd: (RunningBoard) invalidateAssertionWithIdentifier
+2026-11-16 22:43:04.100000+0000 0x2001     Fault       0x0                  88     0    Google Chrome Helper: (libxpc.dylib) [com.apple.xpc:connection] [0x7ab7365cc0] first line
+second line of the fault
+	third line, indented
+2026-11-16 22:43:04.200000+0000 0x2002     Debug       0x0                  88     0    Google Chrome Helper: [0x1] no subsystem here

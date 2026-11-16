@@ -1,0 +1,4 @@
+Filtering the log data using "process == "kernel""
+{"timezoneName":"","messageType":"Fault","eventType":"logEvent","source":null,"formatString":"hello %d","userID":501,"activityIdentifier":7,"subsystem":"com.example.sub","category":"cat","threadID":99,"senderImageUUID":"1AD907DA-233E-3F5D-8323-DE4527D6A74F","processImagePath":"/usr/libexec/exampled","senderImagePath":"/usr/lib/libexample.dylib","timestamp":"2026-11-13 15:55:22.273495+0000","machTimestamp":12345,"eventMessage":"hello 1","processID":21345,"parentActivityIdentifier":3,"traceID":42}
+{"timezoneName":"","messageType":"Info","eventType":"logEvent","source":null,"formatString":"%s","userID":0,"activityIdentifier":0,"subsystem":"","category":"","threadID":100,"processImagePath":"","senderImagePath":"","timestamp":"2026-11-13 15:55:22.300000+0000","eventMessage":"no process path","processID":0,"traceID":0}
+{"count":2,"finished":1}

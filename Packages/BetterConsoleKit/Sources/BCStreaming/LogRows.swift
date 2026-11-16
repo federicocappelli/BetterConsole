@@ -49,6 +49,24 @@ public final class LogRows {
         return row >= 0 ? row : nil
     }
 
+    /// The first row whose position is at or after `position`, or nil if none is.
+    public func row(atOrAfter position: Int) -> Int? {
+        let row: Int
+        if isFiltered {
+            row = index.row(atOrBefore: position - 1).map { $0 + 1 } ?? 0
+        } else {
+            row = Swift.max(0, position - store.removedCount)
+        }
+        return row < count ? row : nil
+    }
+
+    /// The rows as they are now, for reading later (Save Logs). O(1).
+    public func snapshot() -> RowSnapshot {
+        isFiltered
+            ? RowSnapshot(storage: .filtered(index))
+            : RowSnapshot(storage: .contiguous(store.removedCount..<store.removedCount + store.count))
+    }
+
     /// Replaces the rows with a filtered set and starts a new reset generation.
     func installFiltered(_ newIndex: MatchIndex) {
         index = newIndex

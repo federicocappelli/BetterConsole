@@ -28,6 +28,24 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # The builder's private row drag (App/Filter/Editor/BuilderDrag.swift).
+        # Log files open in their own windows (App/Files/LogFileWindows.swift).
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Log File
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.log
+              - com.apple.log
+              - public.plain-text
+              - public.json
+              - public.ndjson
+              - app.betterconsole.jsonl
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: app.betterconsole.jsonl
+            UTTypeDescription: JSON Lines
+            UTTypeConformsTo: [public.plain-text]
+            UTTypeTagSpecification:
+              public.filename-extension: [jsonl]
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: app.betterconsole.builder-node
             UTTypeDescription: BetterConsole filter row
@@ -48,10 +66,13 @@ targets:
         product: BCMobileDevice
       - package: BetterConsoleKit
         product: BCFilter
+      - package: BetterConsoleKit
+        product: BCFiles
     settings:
       base:
         PRODUCT_NAME: BetterConsole
         PRODUCT_BUNDLE_IDENTIFIER: app.betterconsole.BetterConsole
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: BetterConsole
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
@@ -72,6 +93,7 @@ targets:
       - path: App/LogView/FollowTracker.swift
       - path: App/LogView/LogColumns.swift
       - path: App/LogView/RowCopy.swift
+      - path: App/Files/LogFileText.swift
       - path: App/Filter/Editor/EditorText.swift
       - path: App/Filter/Editor/EditorUndoRouting.swift
       - path: App/Filter/Editor/PredicateTextMapping.swift
@@ -81,6 +103,8 @@ targets:
         product: BCModel
       - package: BetterConsoleKit
         product: BCFilter
+      - package: BetterConsoleKit
+        product: BCFiles
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.betterconsole.BetterConsoleTests

@@ -39,6 +39,9 @@ public final class SessionRegistry {
     @ObservationIgnored private var latest: [Int: [LogDevice]] = [:]
     private var present: [LogDevice.ID: LogDevice] = [:]
     private var sessions: [LogDevice.ID: StreamSession] = [:]
+    /// Opened files' sessions: looked up like devices' sessions, but never rows, and left
+    /// alone by discovery updates.
+    @ObservationIgnored private var fileSessions: [LogDevice.ID: StreamSession] = [:]
 
     public init(
         discoveries: [any DeviceDiscovery], transports: [any LogTransport], budget: MemoryBudget,
@@ -53,7 +56,25 @@ public final class SessionRegistry {
     /// The session for a discovered device or a known disconnected one. A pure lookup: sessions
     /// are created when a discovery reports their device, so this is safe to call from a view body.
     public func session(for id: LogDevice.ID) -> StreamSession? {
-        sessions[id]
+        sessions[id] ?? fileSessions[id]
+    }
+
+    /// The session of an opened file (`device.kind == .file`), created with `transport` on the
+    /// first call (and handed to `onSessionCreated`, so it starts with the file's filter); the
+    /// same session while it stays open. Not started.
+    public func openFileSession(device: LogDevice, transport: any LogTransport) -> StreamSession {
+        if let existing = fileSessions[device.id] { return existing }
+        let session = StreamSession(
+            device: device, transport: transport, budget: budget, drainInterval: drainInterval)
+        fileSessions[device.id] = session
+        onSessionCreated?(session)
+        return session
+    }
+
+    /// Forgets an opened file's session (its window closed); the session is released once
+    /// nothing else holds it, giving its memory back to the budget.
+    public func closeFileSession(id: LogDevice.ID) {
+        fileSessions[id] = nil
     }
 
     /// The sidebar selection to keep: `selection` while it still has a row, otherwise this
@@ -127,6 +148,7 @@ public final class SessionRegistry {
             case .thisMac: 0
             case .physical: 1
             case .simulator: 2
+            case .file: 3
             }
         }
         let (ra, rb) = (rank(a.device.kind), rank(b.device.kind))

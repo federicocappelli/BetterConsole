@@ -56,6 +56,7 @@ private struct DeviceRow: View {
         case .thisMac: "laptopcomputer"
         case .simulator: "apps.iphone"
         case .physical: (row.device.model ?? "").hasPrefix("iPad") ? "ipad" : "iphone"
+        case .file: "doc.text"
         }
     }
 }

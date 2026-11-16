@@ -1,0 +1,8 @@
+Timestamp               Ty Process[PID:TID]
+2026-11-16 22:43:01.287 Df bluetoothd[416:334e7] [com.apple.bluetooth:Server.LE.Scan] Scanning started successfully
+2026-11-16 22:43:01.288 I  bluetoothd[416:334e7] (CoreBluetooth) [com.apple.bluetooth:Server] info line
+2026-11-16 22:43:01.289 Db Google Chrome Helper (Renderer)[900:1a] debug line
+2026-11-16 22:43:01.290 E  kernel[0:171a] tcp connected: [<IPv4-redacted>:50487] interface: en0
+so_gencnt: 79611 t_state: ESTABLISHED
+2026-11-16 22:43:01.291 F  launchd[1:2b] [com.apple.xpc.launchd:core] fault line
+2026-11-16 22:42:54.979 A  MenuBarAgent[750:341df] (RunningBoardServices) observedProcessStatesDidChange

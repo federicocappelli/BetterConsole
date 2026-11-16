@@ -19,6 +19,7 @@
 		3DAA9A656A05A54E98F3361B /* BCModel in Frameworks */ = {isa = PBXBuildFile; productRef = 5638142D835865158570B6E1 /* BCModel */; };
 		40578252F703559BE712B52A /* BuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFF04A74B603552D96E84E35 /* BuilderView.swift */; };
 		44D94940DDD13C96A5524219 /* BuilderRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C78DDD273EF7DB06EF5753F /* BuilderRows.swift */; };
+		52D611382507C5DE507D5899 /* BCFiles in Frameworks */ = {isa = PBXBuildFile; productRef = 66728EA8A33FA021CBCB11A0 /* BCFiles */; };
 		559DB1598580E9BAA91BB9F5 /* PredicateTextMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E9F22464C3E02020B0D2ED /* PredicateTextMapping.swift */; };
 		578A80EA69B304CACEE96F58 /* BubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6F3C8BF435F1F1D827CDA40 /* BubbleView.swift */; };
 		5DBD26C952BF7F7D2C0253A3 /* EditorText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A66BE707F14FDF10E3FE641 /* EditorText.swift */; };
@@ -28,6 +29,7 @@
 		6E86DD36A28D9B586530674E /* RowCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7AB811347B85A9654346FC /* RowCopy.swift */; };
 		6EA04DF2FBB586141969F64A /* FollowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */; };
 		70624564E6D0FC77670DA99D /* EditorUndoRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A18881FFAC630222294EAB /* EditorUndoRouting.swift */; };
+		72C7765467FD5107FAAAD1AB /* LogFileWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = E454334F441140E744AB5C79 /* LogFileWindows.swift */; };
 		72D60390FAC06614D5DFF60F /* BuilderDragTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 185D6F24EC2924603A9EA939 /* BuilderDragTests.swift */; };
 		7783986BB87D39E2B3E394C3 /* BCStreaming in Frameworks */ = {isa = PBXBuildFile; productRef = A79B420BD2FD75BC9D5EC22E /* BCStreaming */; };
 		7813AE2235ECE87479D7FE3C /* DeviceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */; };
@@ -35,10 +37,12 @@
 		8E6E909000D1988562FEE084 /* BetterConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */; };
 		8F56553BEB7BAEC14D57E793 /* EditorBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE5B0A23D1F27A43C5AB64F /* EditorBottomBar.swift */; };
 		8FAEB1A38CC5B102A8D74722 /* FollowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */; };
+		99AD5E39330675552C4CBAC8 /* LogFileText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F77FE4058584225D5E3417 /* LogFileText.swift */; };
 		9A11019A2CEF5DC091E9589D /* PredicateTextMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E9F22464C3E02020B0D2ED /* PredicateTextMapping.swift */; };
 		A2360D653E1482374F84343A /* FilterEditorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C8ED50B70CC7B1BAD0B231E /* FilterEditorWindow.swift */; };
 		AB2F25032757831E877E3959 /* EditorUndoRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF160D617577BFEDCC8032EA /* EditorUndoRoutingTests.swift */; };
 		AB9D9DF3F818AC522C146E93 /* PredicateTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB46C9736A172F7AB3D46B6 /* PredicateTextView.swift */; };
+		ABBCC128FEAD638568976A44 /* BCFiles in Frameworks */ = {isa = PBXBuildFile; productRef = C89AFCB6C274706E6808649F /* BCFiles */; };
 		AE8228C4F79FBC4A58319940 /* LogTimestampFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2068AF7770FBB63B305B12 /* LogTimestampFormatter.swift */; };
 		BEC0E0F0A8B12182865DE5AC /* BCFilter in Frameworks */ = {isa = PBXBuildFile; productRef = DB6E9BCDB7989993E72EF9BD /* BCFilter */; };
 		C266C1C75DFE09FD20D056DC /* EditorPanels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C17B6764D2775371839600 /* EditorPanels.swift */; };
@@ -52,15 +56,19 @@
 		CF2F161DC4759B36D81B06D4 /* FollowTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E93A8AD525B8E5A71C19850 /* FollowTrackerTests.swift */; };
 		D63AA35C7E88ED175CF24A97 /* EditorTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E2CD3888067A596CA4DCB7B /* EditorTextTests.swift */; };
 		D72E563A51BE1F6695548352 /* MainThreadProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D73407BA523432E6DD08191A /* MainThreadProbe.swift */; };
+		D7F49789E0A52724E2B420FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D33C07C5F5998433F5E860D7 /* Assets.xcassets */; };
 		E8B549EBE0581C58D8128070 /* BCModel in Frameworks */ = {isa = PBXBuildFile; productRef = 4976774910F91C8C2FD918B9 /* BCModel */; };
+		F187E9542E72C41090EE075C /* LogFileTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6610C5553B06634DCDABB0 /* LogFileTextTests.swift */; };
 		F19181B68B079D8AE7D471CB /* LogColumns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E17D78D7F9EAF202CF735F /* LogColumns.swift */; };
 		F2E61BF91E3405F01E446DF8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2F503C977CB70DC79A5EDD /* SettingsView.swift */; };
+		F629D09DA4D6AC5DC355B026 /* LogFileText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F77FE4058584225D5E3417 /* LogFileText.swift */; };
 		FA34CA293DA7FE4FF6D5F341 /* LogTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6B283E13911799351DCFA0 /* LogTableView.swift */; };
 		FDE58DE2F72C26832F0D987F /* FilterDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38993CD41371F51DC6BA5844 /* FilterDialogs.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		05FF695F1AE2DAAE45379A21 /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
+		0A6610C5553B06634DCDABB0 /* LogFileTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogFileTextTests.swift; sourceTree = "<group>"; };
 		0B197D56D2B9F0C5C91DDD39 /* BetterConsole.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BetterConsole.entitlements; sourceTree = "<group>"; };
 		0E93A8AD525B8E5A71C19850 /* FollowTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowTrackerTests.swift; sourceTree = "<group>"; };
 		10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowTracker.swift; sourceTree = "<group>"; };
@@ -72,6 +80,7 @@
 		38993CD41371F51DC6BA5844 /* FilterDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterDialogs.swift; sourceTree = "<group>"; };
 		4B7AB811347B85A9654346FC /* RowCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowCopy.swift; sourceTree = "<group>"; };
 		4EE5B0A23D1F27A43C5AB64F /* EditorBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorBottomBar.swift; sourceTree = "<group>"; };
+		57F77FE4058584225D5E3417 /* LogFileText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogFileText.swift; sourceTree = "<group>"; };
 		5C78DDD273EF7DB06EF5753F /* BuilderRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuilderRows.swift; sourceTree = "<group>"; };
 		5C8ED50B70CC7B1BAD0B231E /* FilterEditorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterEditorWindow.swift; sourceTree = "<group>"; };
 		5C9C51991A590474B64E8409 /* RowCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowCopyTests.swift; sourceTree = "<group>"; };
@@ -94,9 +103,11 @@
 		C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSidebar.swift; sourceTree = "<group>"; };
 		C6F3C8BF435F1F1D827CDA40 /* BubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleView.swift; sourceTree = "<group>"; };
 		D199AB61D3B143C1879316F8 /* BetterConsole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BetterConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D33C07C5F5998433F5E860D7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D73407BA523432E6DD08191A /* MainThreadProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadProbe.swift; sourceTree = "<group>"; };
 		D9E9F22464C3E02020B0D2ED /* PredicateTextMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredicateTextMapping.swift; sourceTree = "<group>"; };
 		DEB46C9736A172F7AB3D46B6 /* PredicateTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredicateTextView.swift; sourceTree = "<group>"; };
+		E454334F441140E744AB5C79 /* LogFileWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogFileWindows.swift; sourceTree = "<group>"; };
 		EFF04A74B603552D96E84E35 /* BuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuilderView.swift; sourceTree = "<group>"; };
 		FD7B1612B8C3321CFF0BCEAF /* FilterBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterBar.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -108,6 +119,7 @@
 			files = (
 				3DAA9A656A05A54E98F3361B /* BCModel in Frameworks */,
 				BEC0E0F0A8B12182865DE5AC /* BCFilter in Frameworks */,
+				ABBCC128FEAD638568976A44 /* BCFiles in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +133,7 @@
 				7783986BB87D39E2B3E394C3 /* BCStreaming in Frameworks */,
 				05166CEE6263F93A027B46C5 /* BCMobileDevice in Frameworks */,
 				0603D3E3DD37A6E2B0A97BDF /* BCFilter in Frameworks */,
+				52D611382507C5DE507D5899 /* BCFiles in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,10 +144,12 @@
 			isa = PBXGroup;
 			children = (
 				7C08C3584B187D70C939DD64 /* AppEnvironment.swift */,
+				D33C07C5F5998433F5E860D7 /* Assets.xcassets */,
 				0B197D56D2B9F0C5C91DDD39 /* BetterConsole.entitlements */,
 				8954D5A69C5590CCE1D23A76 /* BetterConsoleApp.swift */,
 				BED9D092EDB1840DD3154E0A /* Info.plist */,
 				9B3CBDBBF621B7E7B9CE925D /* Diagnostics */,
+				E4128FF528006ABEA2DB181F /* Files */,
 				A6F223B2B34065E36ADF67C1 /* Filter */,
 				FD58F6E936F6C6F1ECE3B8A5 /* LogView */,
 				B9F2DB786628CC8FCA95F7F2 /* Settings */,
@@ -176,6 +191,7 @@
 				8E2CD3888067A596CA4DCB7B /* EditorTextTests.swift */,
 				BF160D617577BFEDCC8032EA /* EditorUndoRoutingTests.swift */,
 				0E93A8AD525B8E5A71C19850 /* FollowTrackerTests.swift */,
+				0A6610C5553B06634DCDABB0 /* LogFileTextTests.swift */,
 				751E71ED4D34F20BF61C7C8A /* LogTimestampFormatterTests.swift */,
 				5DAFF412F4D4BA7F408F7038 /* PredicateTextMappingTests.swift */,
 				5C9C51991A590474B64E8409 /* RowCopyTests.swift */,
@@ -238,6 +254,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		E4128FF528006ABEA2DB181F /* Files */ = {
+			isa = PBXGroup;
+			children = (
+				57F77FE4058584225D5E3417 /* LogFileText.swift */,
+				E454334F441140E744AB5C79 /* LogFileWindows.swift */,
+			);
+			path = Files;
+			sourceTree = "<group>";
+		};
 		EC2833BFB264F7CD5E3D8CAF /* Tests */ = {
 			isa = PBXGroup;
 			children = (
@@ -278,6 +303,7 @@
 			packageProductDependencies = (
 				5638142D835865158570B6E1 /* BCModel */,
 				DB6E9BCDB7989993E72EF9BD /* BCFilter */,
+				C89AFCB6C274706E6808649F /* BCFiles */,
 			);
 			productName = BetterConsoleTests;
 			productReference = 2FF6E68E7D3CE2AE49EB75E0 /* BetterConsoleTests.xctest */;
@@ -288,6 +314,7 @@
 			buildConfigurationList = 51BD3C0ECE5074B426AE8D80 /* Build configuration list for PBXNativeTarget "BetterConsole" */;
 			buildPhases = (
 				B30E8360D2747C36375B68C4 /* Sources */,
+				F30E8B6A108BD28B248D1782 /* Resources */,
 				DB4153A0A894FB38D5804481 /* Frameworks */,
 			);
 			buildRules = (
@@ -302,6 +329,7 @@
 				A79B420BD2FD75BC9D5EC22E /* BCStreaming */,
 				DE370B38A2B2CB394B722B30 /* BCMobileDevice */,
 				7F637C6E1777B3B21A3B3B61 /* BCFilter */,
+				66728EA8A33FA021CBCB11A0 /* BCFiles */,
 			);
 			productName = BetterConsole;
 			productReference = D199AB61D3B143C1879316F8 /* BetterConsole.app */;
@@ -349,6 +377,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		F30E8B6A108BD28B248D1782 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D7F49789E0A52724E2B420FC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		90DBB6B93B10B0D53E79F4CF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -363,6 +402,8 @@
 				8FAEB1A38CC5B102A8D74722 /* FollowTracker.swift in Sources */,
 				CF2F161DC4759B36D81B06D4 /* FollowTrackerTests.swift in Sources */,
 				31EBAA1A1B8960C81542D5FC /* LogColumns.swift in Sources */,
+				99AD5E39330675552C4CBAC8 /* LogFileText.swift in Sources */,
+				F187E9542E72C41090EE075C /* LogFileTextTests.swift in Sources */,
 				AE8228C4F79FBC4A58319940 /* LogTimestampFormatter.swift in Sources */,
 				C34189AA9A4115AA70F29B2A /* LogTimestampFormatterTests.swift in Sources */,
 				9A11019A2CEF5DC091E9589D /* PredicateTextMapping.swift in Sources */,
@@ -395,6 +436,8 @@
 				6EA04DF2FBB586141969F64A /* FollowTracker.swift in Sources */,
 				F19181B68B079D8AE7D471CB /* LogColumns.swift in Sources */,
 				329CAC904DC724A159D3545A /* LogDetailView.swift in Sources */,
+				F629D09DA4D6AC5DC355B026 /* LogFileText.swift in Sources */,
+				72C7765467FD5107FAAAD1AB /* LogFileWindows.swift in Sources */,
 				FA34CA293DA7FE4FF6D5F341 /* LogTableView.swift in Sources */,
 				62515604F5555428E22DC55B /* LogTimestampFormatter.swift in Sources */,
 				C558FE8DDA95068516D086FB /* LogView.swift in Sources */,
@@ -670,6 +713,10 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = BCModel;
 		};
+		66728EA8A33FA021CBCB11A0 /* BCFiles */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCFiles;
+		};
 		7F637C6E1777B3B21A3B3B61 /* BCFilter */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BCFilter;
@@ -685,6 +732,10 @@
 		ADB6C94E21138B2E9A42B638 /* BCStore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BCStore;
+		};
+		C89AFCB6C274706E6808649F /* BCFiles */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BCFiles;
 		};
 		DB6E9BCDB7989993E72EF9BD /* BCFilter */ = {
 			isa = XCSwiftPackageProductDependency;

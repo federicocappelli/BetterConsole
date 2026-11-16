@@ -59,7 +59,7 @@ public final class FilterWorkspace {
     public init(library: FilterLibrary, persistence: any DeviceFilterPersistence) {
         self.library = library
         self.persistence = persistence
-        var restored = persistence.load()
+        var restored = persistence.load().filter { !Self.isTransient($0.key) }
         for (id, var state) in restored {
             if let base = state.basedOn {
                 if let filter = library.filter(id: base) {
@@ -285,5 +285,9 @@ public final class FilterWorkspace {
         }
     }
 
-    private func persist() { persistence.save(states) }
+    /// Opened files' ids (`file:` and a path): their filter states last while the app runs
+    /// and are never saved.
+    public static func isTransient(_ deviceID: String) -> Bool { deviceID.hasPrefix("file:") }
+
+    private func persist() { persistence.save(states.filter { !Self.isTransient($0.key) }) }
 }

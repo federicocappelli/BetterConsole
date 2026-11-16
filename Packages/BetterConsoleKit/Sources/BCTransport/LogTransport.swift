@@ -13,6 +13,15 @@ public protocol LogTransport: Sendable {
     /// between `next()` calls other than the iteration itself. Overload is absorbed and
     /// counted downstream, in the consumer's bounded queue (Task 6), not here.
     func stream(from device: LogDevice) -> AsyncThrowingStream<[LogEntry], Error>
+
+    /// A finite source (a file): its stream ends normally once everything is read, and no
+    /// entry may be lost, so the consumer waits for room instead of dropping. Its stream should
+    /// produce batches as they are asked for, so waiting holds the source back.
+    var isFinite: Bool { get }
+}
+
+extension LogTransport {
+    public var isFinite: Bool { false }
 }
 
 public enum TransportError: Error, Equatable, CustomStringConvertible, LocalizedError {

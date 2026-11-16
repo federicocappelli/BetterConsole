@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import BCFilter
 import BCModel
@@ -14,15 +15,20 @@ struct RowViewportTests {
     let transport = FakeTransport()
 
     /// The part of the table the decisions act on: which row is at the top of the visible
-    /// area and which one is selected, plus what the detail pane shows.
+    /// area and which rows are selected, plus what the detail pane shows.
     @MainActor final class FakeTable {
         let session: StreamSession
         let viewport = RowViewport()
         var top: Int?
         var topOffset: Double = 0
-        var selected: Int?
+        /// Selected table rows, ascending and disjoint (as `IndexSet.rangeView`).
+        var selectedRows: [Range<Int>] = []
         /// Position of the message the detail pane shows.
         var detail: Int?
+        /// The detail pane's "N messages selected", or nil.
+        var detailCount: Int?
+        /// The row a plain or ⌘-click last hit: ⇧-click extends from it (as NSTableView).
+        var clickAnchor: Int?
         var updates: [RowViewport.Update] = []
 
         init(session: StreamSession) { self.session = session }
@@ -41,10 +47,16 @@ struct RowViewportTests {
             if let t = top, t >= u.count { (top, topOffset) = (u.count > 0 ? u.count - 1 : nil, 0) }
             switch u.selection {
             case .keep: break
-            case .select(let row): selected = row
-            case .deselect(let clearDetail):
-                selected = nil
-                if clearDetail { detail = nil }
+            case .select(let rows, let shown):
+                selectedRows = rows
+                switch shown {
+                case .keep: break
+                case .entry(let row): (detail, detailCount) = (session.rows.position(ofRow: row), nil)
+                case .count(let n): (detail, detailCount) = (nil, n)
+                }
+            case .clear:
+                selectedRows = []
+                (detail, detailCount) = (nil, nil)
             }
             viewport.recordTop(tableRow: top, offset: topOffset, in: session.rows, byUser: false)
             return u
@@ -56,19 +68,60 @@ struct RowViewportTests {
             viewport.recordTop(tableRow: row, offset: offset, in: session.rows, byUser: true)
         }
 
-        /// The user clicks table row `row`.
-        func click(tableRow row: Int?) {
-            selected = row
-            switch viewport.userSelected(tableRow: row, in: session.rows) {
-            case .entry(let r): detail = session.rows.position(ofRow: r)
-            case .cleared: detail = nil
-            case .ignored: selected = nil
+        /// The table's selection became `rows` (a click, ⇧/⌘-click or Select All).
+        func userChanged(_ rows: [Range<Int>]) {
+            selectedRows = rows
+            switch viewport.userSelected(tableRows: rows, in: session.rows) {
+            case .entry(let r): (detail, detailCount) = (session.rows.position(ofRow: r), nil)
+            case .several(let n): (detail, detailCount) = (nil, n)
+            case .cleared: (detail, detailCount) = (nil, nil)
+            case .ignored: selectedRows = []
             }
+        }
+
+        /// The user clicks table row `row` (nil: empty space, clearing the selection).
+        func click(tableRow row: Int?) {
+            clickAnchor = row
+            userChanged(row.map { [$0..<$0 + 1] } ?? [])
+        }
+
+        /// ⇧-click: the rows from the click anchor to `row` replace the selection.
+        func shiftClick(tableRow row: Int) {
+            let anchor = clickAnchor ?? row
+            userChanged([min(anchor, row)..<max(anchor, row) + 1])
+        }
+
+        /// ⌘-click: toggles `row`.
+        func commandClick(tableRow row: Int) {
+            clickAnchor = row
+            var set = Set(selectedRows.joined())
+            if set.contains(row) { set.remove(row) } else { set.insert(row) }
+            var ranges: [Range<Int>] = []
+            for r in set.sorted() {
+                if let last = ranges.last, last.upperBound == r {
+                    ranges[ranges.count - 1] = last.lowerBound..<r + 1
+                } else {
+                    ranges.append(r..<r + 1)
+                }
+            }
+            userChanged(ranges)
+        }
+
+        /// ⌘A: every row the table shows.
+        func selectAll() {
+            userChanged(viewport.shownCount > 0 ? [0..<viewport.shownCount] : [])
+        }
+
+        /// The single selected row, or nil if none or several are selected.
+        var selected: Int? {
+            selectedRows.count == 1 && selectedRows[0].count == 1 ? selectedRows[0].lowerBound : nil
         }
 
         /// Absolute position of the message at the top / selected, as the table shows them.
         var topPosition: Int? { top.map { session.rows.position(ofRow: $0) } }
         var selectedPosition: Int? { selected.map { session.rows.position(ofRow: $0) } }
+        /// Absolute positions of every row the table shows selected (small selections).
+        var selectedPositions: [Int] { selectedRows.joined().map(session.rows.position(ofRow:)) }
     }
 
     func makeSession(budget: MemoryBudget = MemoryBudget()) -> StreamSession {
@@ -309,7 +362,7 @@ struct RowViewportTests {
         #expect(await settle(s, total: 10_000))
         table.update()
         #expect(table.selectedPosition == 6_000)
-        #expect(table.viewport.isSelectionShown)
+        #expect(table.viewport.selectedRows(in: s.rows) == [table.selected!..<table.selected! + 1])
     }
 
     @Test func clearWhileFilteredClearsSelectionAndDetail() async {
@@ -321,9 +374,9 @@ struct RowViewportTests {
         #expect(table.detail == 6_000)
         s.clear()
         let u = table.update()
-        #expect(u.selection == .deselect(clearDetail: true))
+        #expect(u.selection == .clear)
         #expect(table.detail == nil)
-        #expect(table.viewport.selectedPosition == nil)
+        #expect(table.viewport.selection.isEmpty)
     }
 
     /// Hidden by the filter (6,001 is a B), then evicted: the detail pane clears.
@@ -340,9 +393,9 @@ struct RowViewportTests {
         let perEntry = s.store.estimatedBytes / s.store.count
         budget.limitBytes = perEntry * 3_000  // evicts 0..<7,000
         let u = table.update()
-        #expect(u.selection == .deselect(clearDetail: true))
+        #expect(u.selection == .clear)
         #expect(table.detail == nil)
-        #expect(table.viewport.selectedPosition == nil)
+        #expect(table.viewport.selection.isEmpty)
     }
 
     @Test func evictingAShownSelectionClearsIt() async {
@@ -352,7 +405,7 @@ struct RowViewportTests {
         let perEntry = s.store.estimatedBytes / s.store.count
         budget.limitBytes = perEntry * (s.store.count - 200)
         let u = table.update()
-        #expect(u.selection == .deselect(clearDetail: true))
+        #expect(u.selection == .clear)
         #expect(table.detail == nil)
     }
 
@@ -364,9 +417,360 @@ struct RowViewportTests {
         s.setFilter(processIs("A"))
         table.click(tableRow: 10)
         #expect(table.detail == 6_000)
-        #expect(table.viewport.selectedPosition == 6_000)
+        #expect(table.viewport.selection.ranges == [6_000..<6_001])
         #expect(await settle(s, total: 10_000))
         table.update()
         #expect(table.selectedPosition == 6_000)
     }
+
+    // MARK: Multiple selection
+
+    /// ⌘A selects every row there is; evicting the oldest drops their positions, and evicting
+    /// the rest clears the selection and the detail pane.
+    @Test func selectAllThenEvictionDropsTheEvictedPositions() async {
+        let budget = MemoryBudget()
+        let (s, table) = await streamed(budget: budget)
+        table.selectAll()
+        #expect(table.viewport.selection.ranges == [0..<10_000])
+        #expect(table.detailCount == 10_000)
+
+        let perEntry = s.store.estimatedBytes / s.store.count
+        budget.limitBytes = perEntry * (s.store.count - 100)
+        let u = table.update()
+        #expect(table.viewport.selection.ranges == [100..<10_000])
+        #expect(u.selection == .select(rows: [0..<9_900], detail: .count(9_900)))
+        #expect(table.detailCount == 9_900)
+
+        budget.limitBytes = 0
+        #expect(s.store.count == 0)
+        #expect(table.update().selection == .clear)
+        #expect(table.viewport.selection.isEmpty)
+        #expect(table.detailCount == nil)
+    }
+
+    /// Rows that arrive after ⌘A are not selected.
+    @Test func selectAllThenNewRowsAreNotSelected() async {
+        let (s, table) = await streamed()
+        table.selectAll()
+        stream(10_000..<10_500)
+        #expect(await settle(s, total: 10_500))
+        let u = table.update()
+        #expect(u.count == 10_500)
+        #expect(u.selection == .keep)
+        #expect(table.selectedRows == [0..<10_000])
+        #expect(table.viewport.selectedRows(in: s.rows) == [0..<10_000])
+        #expect(table.detailCount == 10_000)
+    }
+
+    /// ⌘A during a rescan selects the rows found so far; older rows the rescan adds after it
+    /// are not selected.
+    @Test func selectAllDuringARescanLeavesLaterRescanRowsOut() async {
+        let (s, table) = await streamed()
+        var copies = 0
+        var selectedAt: [Range<Int>] = []
+        s.afterRescanCopy = {
+            copies += 1
+            table.update()
+            if copies == 3 {
+                table.selectAll()
+                selectedAt = table.viewport.selection.ranges
+            }
+        }
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_000))
+        table.update()
+        let first = try! #require(selectedAt.first?.lowerBound)
+        #expect(first > 0)
+        let firstRow = s.rows.row(forPosition: first)!
+        #expect(firstRow > 0)  // older matches were added below it
+        #expect(table.selectedRows == [firstRow..<s.rows.count])
+        #expect(table.detailCount == s.rows.count - firstRow)
+    }
+
+    /// ⇧-click selects the range from the clicked row; the detail pane counts it.
+    @Test func shiftClickSelectsARange() async {
+        let (_, table) = await streamed()
+        table.click(tableRow: 100)
+        #expect(table.detail == 100)
+        table.shiftClick(tableRow: 105)
+        #expect(table.viewport.selection.ranges == [100..<106])
+        #expect((table.detail, table.detailCount) == (nil, 6))
+        table.shiftClick(tableRow: 98)  // the anchor stays at 100
+        #expect(table.viewport.selection.ranges == [98..<101])
+        #expect(table.detailCount == 3)
+        #expect(table.update().selection == .keep)
+    }
+
+    /// ⌘-click adds and removes single rows; one row left shows its details again.
+    @Test func commandClickToggles() async {
+        let (_, table) = await streamed()
+        table.click(tableRow: 100)
+        table.commandClick(tableRow: 102)
+        table.commandClick(tableRow: 104)
+        #expect(table.viewport.selection.ranges == [100..<101, 102..<103, 104..<105])
+        #expect(table.detailCount == 3)
+        table.commandClick(tableRow: 101)
+        #expect(table.viewport.selection.ranges == [100..<103, 104..<105])
+        #expect(table.detailCount == 4)
+        table.commandClick(tableRow: 100)
+        table.commandClick(tableRow: 101)
+        table.commandClick(tableRow: 102)
+        #expect(table.viewport.selection.ranges == [104..<105])
+        #expect((table.detail, table.detailCount) == (104, nil))
+        table.commandClick(tableRow: 104)
+        #expect(table.viewport.selection.isEmpty)
+        #expect((table.detail, table.detailCount) == (nil, nil))
+    }
+
+    /// Several rows selected without a filter: a filter change clears the selection and the
+    /// detail pane (a range would otherwise stand for rows the new filter hides or shows).
+    @Test func filterChangeClearsAMultiSelection() async {
+        let (s, table) = await streamed()
+        table.click(tableRow: 6_000)
+        table.shiftClick(tableRow: 6_010)
+        #expect(table.detailCount == 11)
+        s.setFilter(processIs("A"))
+        #expect(table.update().selection == .clear)
+        #expect(table.viewport.selection.isEmpty)
+        #expect((table.detail, table.detailCount) == (nil, nil))
+        #expect(await settle(s, total: 10_000))
+        table.update()
+        #expect(table.selectedRows.isEmpty)
+        s.setFilter(nil)
+        table.update()
+        #expect(table.selectedRows.isEmpty)
+    }
+
+    /// Several rows selected under a filter stay exact while it stays; changing it (to
+    /// another filter or none) clears them. A single row still survives filter changes.
+    @Test func multiSelectionUnderAFilter() async {
+        let (s, table) = await streamed()
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_000))
+        table.update()
+        table.click(tableRow: s.rows.row(forPosition: 6_000))
+        table.shiftClick(tableRow: s.rows.row(forPosition: 6_009)!)
+        #expect(table.selectedPositions == [6_000, 6_003, 6_006, 6_009])
+        #expect(table.detailCount == 4)
+        stream(10_000..<10_300)
+        #expect(await settle(s, total: 10_300))
+        #expect(table.update().selection == .keep)
+        #expect(table.selectedPositions == [6_000, 6_003, 6_006, 6_009])
+
+        s.setFilter(processIs("B"))
+        #expect(table.update().selection == .clear)
+        #expect(await settle(s, total: 10_300))
+        table.update()
+        #expect(table.selectedRows.isEmpty)
+        #expect((table.detail, table.detailCount) == (nil, nil))
+
+        // Again under A, then no filter: cleared too.
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_300))
+        table.update()
+        table.click(tableRow: s.rows.row(forPosition: 6_000))
+        table.shiftClick(tableRow: s.rows.row(forPosition: 6_003)!)
+        s.setFilter(nil)
+        #expect(table.update().selection == .clear)
+        #expect(table.selectedRows.isEmpty)
+
+        // One row: kept across the change, as before.
+        table.click(tableRow: 6_001)
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_300))
+        table.update()
+        #expect(table.selected == nil)
+        #expect(table.detail == 6_001)
+        s.setFilter(nil)
+        table.update()
+        #expect(table.selectedPosition == 6_001)
+    }
+
+    /// Eviction updates the detail pane's count, shows the details once one row is left, and
+    /// clears the selection and the pane once none is.
+    @Test func evictionUpdatesTheCountThenClears() async {
+        let budget = MemoryBudget()
+        let (s, table) = await streamed(budget: budget)
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_000))
+        table.update()
+        table.click(tableRow: s.rows.row(forPosition: 6_000))
+        table.shiftClick(tableRow: s.rows.row(forPosition: 6_009)!)
+        #expect(table.detailCount == 4)
+        let perEntry = s.store.estimatedBytes / s.store.count
+
+        budget.limitBytes = perEntry * (10_000 - 6_004)  // evicts 0..<6,004
+        let u = table.update()
+        #expect(u.selection == .select(rows: [0..<2], detail: .count(2)))
+        #expect(table.selectedPositions == [6_006, 6_009])
+        #expect((table.detail, table.detailCount) == (nil, 2))
+
+        budget.limitBytes = perEntry * (10_000 - 6_008)  // evicts 0..<6,008
+        table.update()
+        #expect(table.selectedPositions == [6_009])
+        #expect((table.detail, table.detailCount) == (6_009, nil))
+
+        budget.limitBytes = perEntry * (10_000 - 6_010)
+        #expect(table.update().selection == .clear)
+        #expect(table.viewport.selection.isEmpty)
+        #expect((table.detail, table.detailCount) == (nil, nil))
+    }
+
+    /// Clear empties the selection, whatever its size.
+    @Test func clearEmptiesTheSelection() async {
+        let (s, table) = await streamed()
+        table.selectAll()
+        s.clear()
+        #expect(table.update().selection == .clear)
+        #expect(table.viewport.selection.isEmpty)
+        #expect(table.selectedRows.isEmpty)
+        #expect((table.detail, table.detailCount) == (nil, nil))
+        // New rows after the clear are not selected.
+        stream(10_000..<10_100)
+        #expect(await settle(s, total: 10_100))
+        #expect(table.update().selection == .keep)
+        #expect(table.selectedRows.isEmpty)
+    }
+
+    /// Selecting (part of) rows evicted since the last update keeps the part still there; a
+    /// selection made between a reset and the next update is ignored.
+    @Test func selectionOfRowsEvictedSinceTheUpdate() async {
+        let budget = MemoryBudget()
+        let (s, table) = await streamed(budget: budget)
+        let perEntry = s.store.estimatedBytes / s.store.count
+        budget.limitBytes = perEntry * (s.store.count - 100)
+        table.click(tableRow: 50)
+        #expect(table.selectedRows.isEmpty)  // ignored
+        table.click(tableRow: 90)
+        table.shiftClick(tableRow: 110)
+        #expect(table.viewport.selection.ranges == [100..<111])
+        #expect(table.detailCount == 11)
+        s.setFilter(processIs("A"))
+        table.selectAll()
+        #expect(table.selectedRows.isEmpty)
+        #expect(table.viewport.selection.ranges == [100..<111])
+    }
+
+    /// The selection is mapped to table rows by its ranges' ends, not row by row: ⌘A over
+    /// 200,000 rows, then 50 updates that each evict rows at the front, stay cheap.
+    @Test func selectAllMappingIsRangeBased() async {
+        let budget = MemoryBudget()
+        let (s, table) = await streamed(200_000, budget: budget)
+        table.selectAll()
+        #expect(table.viewport.selection.ranges == [0..<200_000])
+        let perEntry = s.store.estimatedBytes / s.store.count
+        let clock = ContinuousClock()
+        var spent = Duration.zero
+        for i in 1...50 {
+            budget.limitBytes = perEntry * (200_000 - i * 100)
+            let started = clock.now
+            let u = table.viewport.apply(s, following: false)
+            spent += clock.now - started
+            let count = s.rows.count
+            #expect(u.selection == .select(rows: [0..<count], detail: .count(count)))
+        }
+        #expect(table.viewport.selection.ranges.count == 1)
+        #expect(spent < .milliseconds(25), "50 updates took \(spent)")
+    }
+
+    // MARK: Copying a selection
+
+    /// The selected rows' entries in row order, gathered in chunks of at most
+    /// `maxRescanChunk`; each chunk is handed to the transform (off the main actor).
+    @Test func selectedEntriesComeInChunksInRowOrder() async {
+        let (s, table) = await streamed()
+        table.click(tableRow: 10)
+        table.shiftClick(tableRow: 2_509)
+        table.commandClick(tableRow: 9_999)
+        let chunks = await s.mapSelectedEntries(table.viewport.selectionForCopy) { chunk in
+            chunk.map { Int($0.date.timeIntervalSince1970) }
+        }
+        #expect(chunks?.map(\.count) == [1_000, 1_000, 500, 1])
+        #expect(chunks?.flatMap { $0 } == Array(10..<2_510) + [9_999])
+    }
+
+    /// Filtered: only the selected positions that are rows (⌘A under A spans B and C
+    /// positions too); slow copies shrink the chunk.
+    @Test func selectedEntriesFollowTheRowsAndShrinkSlowChunks() async {
+        let (s, table) = await streamed()
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_000))
+        table.update()
+        table.selectAll()
+        s.copyDurationOverride = .milliseconds(10)
+        let chunks = await s.mapSelectedEntries(table.viewport.selectionForCopy) { chunk in
+            chunk.map { Int($0.date.timeIntervalSince1970) }
+        }
+        #expect(chunks?.first?.count == 1_000)
+        #expect(chunks?.dropFirst().allSatisfy { $0.count <= StreamSession.minRescanChunk } == true)
+        #expect(chunks?.flatMap { $0 } == Array(stride(from: 0, to: 10_000, by: 3)))
+    }
+
+    /// Positions evicted while the copy is under way are skipped.
+    @Test func selectedEntriesSkipPositionsEvictedMidCopy() async {
+        let budget = MemoryBudget()
+        let (s, table) = await streamed(budget: budget)
+        table.selectAll()
+        let perEntry = s.store.estimatedBytes / s.store.count
+        var copies = 0
+        s.afterRescanCopy = {
+            copies += 1
+            if copies == 2 { budget.limitBytes = perEntry * 5_000 }  // evicts 0..<5,000
+        }
+        let chunks = await s.mapSelectedEntries(table.viewport.selectionForCopy) { chunk in
+            chunk.map { Int($0.date.timeIntervalSince1970) }
+        }
+        #expect(chunks?.flatMap { $0 } == Array(0..<2_000) + Array(5_000..<10_000))
+    }
+
+    /// A cancelled copy returns nil.
+    @Test func cancelledCopyReturnsNil() async {
+        let (s, table) = await streamed()
+        table.selectAll()
+        let task = Task { @MainActor in
+            await s.mapSelectedEntries(table.viewport.selectionForCopy) { $0.count }
+        }
+        task.cancel()
+        #expect(await task.value == nil)
+    }
+
+    /// A filter change while several rows are being copied abandons the copy: the rest would
+    /// come from another filter's rows inside the old position span.
+    @Test func filterChangeMidCopyAbandonsIt() async {
+        let (s, table) = await streamed()
+        table.selectAll()
+        let selection = table.viewport.selectionForCopy
+        var copies = 0
+        s.afterRescanCopy = {
+            copies += 1
+            if copies == 2 { s.setFilter(self.processIs("A")) }
+        }
+        #expect(await s.mapSelectedEntries(selection) { $0.count } == nil)
+    }
+
+    /// Several rows selected under A; the filter is removed and Copy runs before the table's
+    /// next update: nothing is copied (the span would cover B and C rows).
+    @Test func copyBetweenAFilterChangeAndTheUpdateIsAbandoned() async {
+        let (s, table) = await streamed()
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_000))
+        table.update()
+        table.click(tableRow: s.rows.row(forPosition: 6_000))
+        table.shiftClick(tableRow: s.rows.row(forPosition: 6_009)!)
+        s.setFilter(nil)
+        #expect(await s.mapSelectedEntries(table.viewport.selectionForCopy) { $0.count } == nil)
+    }
+
+    /// One selected message is a single position: it stays valid across filter changes.
+    @Test func singleSelectionCopiesAcrossAFilterChange() async {
+        let (s, table) = await streamed()
+        table.click(tableRow: 6_000)
+        s.setFilter(processIs("A"))
+        #expect(await settle(s, total: 10_000))
+        let chunks = await s.mapSelectedEntries(table.viewport.selectionForCopy) {
+            $0.map { Int($0.date.timeIntervalSince1970) }
+        }
+        #expect(chunks == [[6_000]])
+    }
 }
+

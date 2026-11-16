@@ -18,8 +18,9 @@ struct LogTableView: NSViewRepresentable {
     let workspace: FilterWorkspace
     /// Bumped by the Now button: scroll to the bottom and follow again.
     let nowRequest: Int
-    /// Called with the selected entry, or nil when the selection is cleared or evicted.
-    let onSelect: @MainActor (LogEntry?) -> Void
+    /// Called with what the detail pane shows: the selected entry, the number of selected
+    /// rows, or nothing when the selection is cleared or evicted.
+    let onSelect: @MainActor (LogDetailView.Content) -> Void
     /// Shown in the lower pane.
     let detail: LogDetailView
 
@@ -35,7 +36,7 @@ struct LogTableView: NSViewRepresentable {
         table.intercellSpacing = NSSize(width: 6, height: 0)
         table.style = .plain
         table.usesAlternatingRowBackgroundColors = true
-        table.allowsMultipleSelection = false
+        table.allowsMultipleSelection = true
         table.allowsEmptySelection = true
         table.allowsColumnReordering = true
         table.allowsColumnResizing = true
@@ -72,8 +73,12 @@ struct LogTableView: NSViewRepresentable {
         context.coordinator.observeRevision()
         context.coordinator.detailHost = detailHost
         context.coordinator.onSelect = onSelect
-        table.menuForRow = { [coordinator = context.coordinator] row in coordinator.menu(forRow: row) }
-        table.copySelectedRow = { [coordinator = context.coordinator] in coordinator.copySelectedRow() }
+        table.menuForRow = { [coordinator = context.coordinator] row, column in
+            coordinator.menu(forRow: row, tableColumn: column)
+        }
+        table.copySelection = { [coordinator = context.coordinator] in
+            coordinator.copySelection(column: nil)
+        }
         return split
     }
 
@@ -105,7 +110,14 @@ struct LogTableView: NSViewRepresentable {
 
         let session: StreamSession
         var workspace: FilterWorkspace
-        var onSelect: @MainActor (LogEntry?) -> Void = { _ in }
+        var onSelect: @MainActor (LogDetailView.Content) -> Void = { _ in }
+        /// What `onSelect` was last called with: unchanged content is not sent again.
+        private var shownDetail = LogDetailView.Content.none
+        /// Count-only detail changes (eviction shrinking a selection) at most every 250 ms;
+        /// the latest one waits in `pendingDetail`.
+        private var detailThrottle = CountUpdateThrottle()
+        private var pendingDetail: LogDetailView.Content?
+        private var pendingDetailTask: Task<Void, Never>?
         var detailHost: NSHostingView<LogDetailView>?
 
         private weak var table: NSTableView?
@@ -136,6 +148,8 @@ struct LogTableView: NSViewRepresentable {
         private var lastApply: ContinuousClock.Instant?
         private var pendingUpdate: Task<Void, Never>?
         private var isDetached = false
+        /// The copy under way (a large selection is gathered in chunks).
+        private var copyTask: Task<Void, Never>?
 
         init(session: StreamSession, workspace: FilterWorkspace) {
             self.session = session
@@ -168,6 +182,10 @@ struct LogTableView: NSViewRepresentable {
             isDetached = true
             pendingUpdate?.cancel()
             pendingUpdate = nil
+            copyTask?.cancel()
+            copyTask = nil
+            pendingDetailTask?.cancel()
+            pendingDetailTask = nil
             NotificationCenter.default.removeObserver(self)
         }
 
@@ -249,11 +267,23 @@ struct LogTableView: NSViewRepresentable {
             switch update.selection {
             case .keep:
                 break
-            case .select(let row):
-                table.selectRowIndexes([row], byExtendingSelection: false)
-            case .deselect(let clearDetail):
+            case .select(let rows, let detail):
+                // Ranges, not rows: ⌘A over 800k rows is one range. Re-applying the selection
+                // resets the table's ⇧-click anchor: a ⇧-click after rows shifted extends from
+                // where AppKit puts it then, not from the last row the user clicked.
+                var indexes = IndexSet()
+                for range in rows { indexes.insert(integersIn: range) }
+                if table.selectedRowIndexes != indexes {
+                    table.selectRowIndexes(indexes, byExtendingSelection: false)
+                }
+                switch detail {
+                case .keep: break
+                case .entry(let row): showDetail(.entry(session.rows[row]))
+                case .count(let count): showDetail(.several(count))
+                }
+            case .clear:
                 table.deselectAll(nil)
-                if clearDetail { onSelect(nil) }
+                showDetail(.none)
             }
             if !follow, let target = update.scroll {
                 var y: CGFloat = 0
@@ -293,21 +323,31 @@ struct LogTableView: NSViewRepresentable {
 
         // MARK: Context menu and Copy
 
-        /// Copy, Copy Message, then Hide … and Show … items for the values of the row. The
-        /// table has already selected the row (through the normal selection path).
-        func menu(forRow row: Int) -> NSMenu? {
+        /// Copy, then Copy <Column> for the clicked column (`tableColumn`, -1: none; both act
+        /// on every selected row), then Hide … and Show … items for the values of the clicked
+        /// row. The table has already selected the row unless it was part of the selection
+        /// (through the normal selection path).
+        func menu(forRow row: Int, tableColumn: Int) -> NSMenu? {
             guard let entry = entry(forRow: row) else { return nil }
+            let column = table.flatMap { table in
+                tableColumn >= 0 && tableColumn < table.numberOfColumns
+                    ? columns[table.tableColumns[tableColumn].identifier.rawValue] : nil
+            }
             let menu = NSMenu()
             menu.autoenablesItems = false
             // A closure item, not `copy:` through the responder chain: a right-click does not
             // make the table first responder, so another field's `copy:` could run instead.
-            let copy = ClosureMenuItem(title: "Copy") { [weak self] in self?.copySelectedRow() }
+            let copy = ClosureMenuItem(title: "Copy") { [weak self] in
+                self?.copySelection(column: nil)
+            }
             copy.keyEquivalent = "c"
             copy.keyEquivalentModifierMask = .command
             menu.addItem(copy)
-            menu.addItem(ClosureMenuItem(title: "Copy Message") { [weak self] in
-                self?.copy(RowCopy.message(of: entry))
-            })
+            if let column {
+                menu.addItem(ClosureMenuItem(title: RowCopy.menuTitle(for: column)) { [weak self] in
+                    self?.copySelection(column: column.id)
+                })
+            }
             let items = QuickFilterItems.items(for: entry)
             for include in [false, true] where !items.isEmpty {
                 menu.addItem(.separator())
@@ -322,16 +362,62 @@ struct LogTableView: NSViewRepresentable {
             return menu
         }
 
-        func copySelectedRow() {
-            guard let table, table.selectedRow >= 0, let entry = entry(forRow: table.selectedRow)
-            else { return }
-            copy(RowCopy.line(for: entry, columns: LogColumn.defaultColumns))
+        /// Copies every selected row that is a row now, in table order: as tab-separated
+        /// lines, or the value of the column with id `column` (nil: the whole row), one per
+        /// line. The entries are gathered from the store in chunks on the main actor and the
+        /// text is built off it, so a large selection does not block the window; a new copy
+        /// replaces one under way.
+        /// The copy is abandoned if the filter changes before it is done (several rows), and
+        /// not written if something else was put on the pasteboard meanwhile.
+        func copySelection(column: String?) {
+            let selection = viewport.selectionForCopy
+            guard !selection.positions.isEmpty else { return }
+            copyTask?.cancel()
+            let changeCount = NSPasteboard.general.changeCount
+            copyTask = Task { [weak self, session] in
+                let render: @Sendable ([LogEntry]) -> String = { RowCopy.text(for: $0, column: column) }
+                guard let pieces = await session.mapSelectedEntries(selection, render),
+                      !pieces.isEmpty
+                else { return }
+                let text = await Self.joined(pieces)
+                guard !Task.isCancelled, let self else { return }
+                self.copyTask = nil
+                let pasteboard = NSPasteboard.general
+                guard pasteboard.changeCount == changeCount else { return }
+                pasteboard.clearContents()
+                pasteboard.setString(text, forType: .string)
+            }
         }
 
-        private func copy(_ string: String) {
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(string, forType: .string)
+        @concurrent
+        private nonisolated static func joined(_ pieces: [String]) async -> String {
+            RowCopy.joined(pieces)
+        }
+
+        /// Sends `content` to the detail pane unless it already shows it; count-only changes
+        /// are spaced out (`CountUpdateThrottle`), the latest one sent when its turn comes.
+        private func showDetail(_ content: LogDetailView.Content) {
+            var countOnly = false
+            if case .several = content, case .several = shownDetail { countOnly = true }
+            guard content != shownDetail else {
+                pendingDetail = nil
+                return
+            }
+            let delay = detailThrottle.delay(at: .now, countOnly: countOnly)
+            guard delay > .zero else {
+                pendingDetail = nil
+                shownDetail = content
+                onSelect(content)
+                return
+            }
+            pendingDetail = content
+            guard pendingDetailTask == nil else { return }
+            pendingDetailTask = Task { [weak self] in
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, let self else { return }
+                self.pendingDetailTask = nil
+                if let pending = self.pendingDetail { self.showDetail(pending) }
+            }
         }
 
         private func addBubble(_ condition: FilterCondition, include: Bool) {
@@ -445,19 +531,25 @@ struct LogTableView: NSViewRepresentable {
 
         func tableViewSelectionDidChange(_ notification: Notification) {
             guard !isApplying, let table else { return }
-            let row = table.selectedRow
-            switch viewport.userSelected(tableRow: row >= 0 ? row : nil, in: session.rows) {
+            // O(ranges): ⌘A is one range however many rows there are.
+            let rows = table.selectedRowIndexes.rangeView.map { $0 }
+            switch viewport.userSelected(tableRows: rows, in: session.rows) {
             case .entry(let current):
-                // Keep the selected row on screen instead of following new messages.
+                // Keep the selected rows on screen instead of following new messages.
                 isFollowing = false
-                onSelect(session.rows[current])
+                showDetail(.entry(session.rows[current]))
+            case .several(let count):
+                isFollowing = false
+                showDetail(.several(count))
             case .cleared:
-                onSelect(nil)
+                showDetail(.none)
             case .ignored:
-                // A row replaced since the last update (blank): undo the click, keep the detail.
+                // Rows replaced since the last update (blank): undo the click, keep the
+                // detail; the next update shows the selection again.
                 isApplying = true
                 table.deselectAll(nil)
                 isApplying = false
+                scheduleUpdate()
             }
         }
     }
@@ -465,23 +557,25 @@ struct LogTableView: NSViewRepresentable {
 
 // MARK: - Table
 
-/// Adds the row context menu (selecting the clicked row first) and ⌘C to `NSTableView`.
+/// Adds the row context menu and ⌘C to `NSTableView`. A right-click on a row outside the
+/// selection selects just that row first; one inside it keeps the selection.
 final class LogNSTableView: NSTableView {
-    /// The menu for the clicked row (already selected), or nil for none.
-    var menuForRow: (Int) -> NSMenu? = { _ in nil }
-    /// Copies the selected row.
-    var copySelectedRow: () -> Void = {}
+    /// The menu for the clicked row (selected) and column (-1: none), or nil for none.
+    var menuForRow: (_ row: Int, _ column: Int) -> NSMenu? = { _, _ in nil }
+    /// Copies the selected rows.
+    var copySelection: () -> Void = {}
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        let row = row(at: convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        let row = row(at: point)
         guard row >= 0 else { return nil }
-        if !selectedRowIndexes.contains(row) || selectedRowIndexes.count != 1 {
+        if !selectedRowIndexes.contains(row) {
             selectRowIndexes([row], byExtendingSelection: false)
         }
-        return menuForRow(row)
+        return menuForRow(row, column(at: point))
     }
 
-    @objc func copy(_ sender: Any?) { copySelectedRow() }
+    @objc func copy(_ sender: Any?) { copySelection() }
 
     override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         if item.action == #selector(copy(_:)) { return selectedRow >= 0 }

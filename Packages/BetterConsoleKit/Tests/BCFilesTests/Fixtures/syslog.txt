@@ -1,0 +1,5 @@
+Nov 16 21:45:31 my-mac com.apple.xpc.launchd[1] (com.apple.mdworker.shared[12345]): Service exited
+Nov  6 09:05:07 my-mac syslogd[100] <Notice>: ASL Sender Statistics
+Nov 16 21:45:32 my-mac kernel[0] <Error>: Sandbox: deny(1)
+Nov 16 21:45:33 my-mac backupd: Starting automatic backup
+    continued line

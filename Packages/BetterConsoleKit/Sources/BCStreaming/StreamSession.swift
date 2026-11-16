@@ -23,10 +23,16 @@ public final class StreamSession {
         /// The device is gone. `wasStreaming` sessions restart when it returns.
         case disconnected(wasStreaming: Bool)
         case failed(String)
+        /// A finite source (a file) was read to the end. Final: reading it again would store
+        /// every entry twice.
+        case finished
     }
 
     public let device: LogDevice
     public private(set) var state: State = .idle
+    /// The source is finite (an opened file): it ends in `.finished`, and its entries wait for
+    /// room in the queue instead of being dropped.
+    public let isFinite: Bool
     public let store: LogStore
     /// What the log table shows: every stored entry, or only those matching `filter`.
     public let rows: LogRows
@@ -53,7 +59,7 @@ public final class StreamSession {
     @ObservationIgnored private let budget: MemoryBudget
     @ObservationIgnored private let drainInterval: Duration
     /// Most entries applied per drain tick, so one tick after a main-thread stall stays cheap.
-    static let maxEntriesPerDrain = 20_000
+    nonisolated static let maxEntriesPerDrain = 20_000
 
     // One generation per started stream. A consumer only reports back while its generation is
     // current, so streams the session cancelled (pause, disconnect, restart) never fail it.
@@ -102,13 +108,14 @@ public final class StreamSession {
     ) {
         self.device = device
         self.transport = transport
+        isFinite = transport?.isFinite ?? false
         self.budget = budget
         self.drainInterval = drainInterval
         queue = BoundedBatchQueue(capacity: queueCapacity)
         let store = RingBufferLogStore()
         self.store = store
         rows = LogRows(store: store)
-        budget.register(store) { [weak self] in
+        budget.register(store, isFile: isFinite) { [weak self] in
             guard let self else { return }
             rows.dropEvicted()
             revision += 1
@@ -137,7 +144,7 @@ public final class StreamSession {
             begin()
         case .disconnected:
             state = .disconnected(wasStreaming: true)
-        case .streaming:
+        case .streaming, .finished:
             break
         }
     }
@@ -150,7 +157,7 @@ public final class StreamSession {
             state = .paused
         case .disconnected:
             state = .disconnected(wasStreaming: false)
-        case .idle, .paused, .failed:
+        case .idle, .paused, .failed, .finished:
             break
         }
     }
@@ -185,7 +192,7 @@ public final class StreamSession {
             state = .disconnected(wasStreaming: failedSinceDeviceSeen)
         case .idle, .paused:
             state = .disconnected(wasStreaming: false)
-        case .disconnected:
+        case .disconnected, .finished:
             break
         }
         failedSinceDeviceSeen = false
@@ -220,18 +227,23 @@ public final class StreamSession {
             options: .userInitiatedAllowingIdleSystemSleep, reason: "Streaming logs")
 
         let stream = transport.stream(from: device)
-        consumer = Task.detached { [weak self] in
+        let finite = isFinite
+        consumer = Task.detached { [weak self, queue] in
             var reason: String?
             do {
                 // Unchecked and at once: checking here would let a slow filter back batches up
-                // in the transport's unbounded buffer, uncounted.
-                for try await entries in stream { inlet.push(entries) }
-                reason = "The log stream ended unexpectedly."
+                // in the transport's unbounded buffer, uncounted. A finite source is asked for
+                // its next batch only once there is room, so nothing is dropped.
+                for try await entries in stream {
+                    if finite { await Self.waitForRoom(in: queue, for: entries.count) }
+                    inlet.push(entries)
+                }
+                if !finite { reason = "The log stream ended unexpectedly." }
             } catch {
                 reason = String(describing: error)
             }
             if Task.isCancelled { return }
-            await self?.streamEnded(generation: gen, reason: reason ?? "")
+            await self?.streamEnded(generation: gen, reason: reason)
         }
 
         startDrainLoop()
@@ -272,8 +284,37 @@ public final class StreamSession {
         }
     }
 
-    private func streamEnded(generation gen: Int, reason: String) {
+    /// Most entries a finite source keeps queued: about two drains' worth, so reading stays
+    /// just ahead of the drain (and the reported progress close to what is shown).
+    nonisolated static let finiteQueueLimit = 2 * maxEntriesPerDrain
+
+    /// Off-main, for a finite source: returns once `count` more entries fit (or the queue is
+    /// empty, for a batch bigger than the limit), or the task is cancelled.
+    nonisolated private static func waitForRoom(in queue: BoundedBatchQueue, for count: Int) async {
+        let limit = Swift.min(queue.capacity, finiteQueueLimit)
+        while !Task.isCancelled {
+            let queued = queue.count
+            if queued == 0 || queued + count <= limit { return }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    /// `reason` nil: a finite source was read to the end. The drain loop keeps going until
+    /// the queue is empty.
+    private func streamEnded(generation gen: Int, reason: String?) {
         guard gen == generation, state == .streaming else { return }
+        guard let reason else {
+            generation += 1
+            inlet?.close()
+            inlet = nil
+            consumer = nil
+            if let appNapActivity {
+                ProcessInfo.processInfo.endActivity(appNapActivity)
+                self.appNapActivity = nil
+            }
+            state = .finished
+            return
+        }
         stop()
         state = .failed(reason)
         failedSinceDeviceSeen = true
@@ -388,6 +429,101 @@ public final class StreamSession {
             counted.total += chunk.entries.count
         }
         return counted
+    }
+
+    /// The entries of `selection`'s positions that are rows, in row order, handed to
+    /// `transform` off the main actor in chunks; the results in order, or nil if cancelled.
+    /// Rows are looked up again for each chunk: positions evicted while the copy is under way
+    /// are skipped. Nil as well once the rows are no longer the generation the selection was
+    /// taken from (`selection.resetCount`, checked before every chunk): a filter change, even
+    /// one not yet shown, would otherwise copy another filter's rows inside the old span.
+    public func mapSelectedEntries<T: Sendable>(
+        _ selection: SelectedPositions, _ transform: @escaping @Sendable ([LogEntry]) -> T
+    ) async -> [T]? {
+        let ranges = selection.positions.ranges
+        var rangeIndex = 0
+        var next = ranges.first?.lowerBound ?? 0
+        let isStale = { selection.resetCount.map { $0 != self.rows.resetCount } ?? false }
+        return await mapChunks(transform, isStale: isStale) { size in
+            while rangeIndex < ranges.count {
+                let range = ranges[rangeIndex]
+                if next < range.upperBound, let row = self.rows.row(atOrAfter: next) {
+                    var entries: [LogEntry] = []
+                    var r = row
+                    next = range.upperBound
+                    while r < self.rows.count {
+                        let position = self.rows.position(ofRow: r)
+                        guard position < range.upperBound else { break }
+                        if entries.count == size {
+                            next = position
+                            break
+                        }
+                        entries.append(self.rows[r])
+                        r += 1
+                    }
+                    if !entries.isEmpty { return entries }
+                }
+                rangeIndex += 1
+                if rangeIndex < ranges.count { next = ranges[rangeIndex].lowerBound }
+            }
+            return nil
+        }
+    }
+
+    /// Every entry of `snapshot` still stored, in row order, handed to `transform` off the
+    /// main actor in chunks (as `mapSelectedEntries`); nil if cancelled. Positions evicted (or
+    /// cleared) since the snapshot are skipped.
+    public func mapEntries<T: Sendable>(
+        of snapshot: RowSnapshot, _ transform: @escaping @Sendable ([LogEntry]) -> T
+    ) async -> [T]? {
+        var index = 0
+        return await mapChunks(transform) { size in
+            let removed = self.store.removedCount
+            index = Swift.max(index, snapshot.firstIndex(atOrAfter: removed))
+            guard index < snapshot.count else { return nil }
+            let end = Swift.min(index + size, snapshot.count)
+            var entries: [LogEntry] = []
+            entries.reserveCapacity(end - index)
+            for i in index..<end { entries.append(self.store[snapshot.position(at: i) - removed]) }
+            index = end
+            return entries
+        }
+    }
+
+    /// The chunk loop of `mapSelectedEntries` and `mapEntries` (nil once cancelled or
+    /// `isStale`, checked before every chunk): `copy(size)` returns the next
+    /// non-empty chunk of at most `size` entries (nil when done) on the main actor; `size`
+    /// adapts as the rescan's does (under 4 ms a copy); each chunk is transformed off the main
+    /// actor before the next is copied.
+    private func mapChunks<T: Sendable>(
+        _ transform: @escaping @Sendable ([LogEntry]) -> T,
+        isStale: () -> Bool = { false },
+        copy: (_ size: Int) -> [LogEntry]?
+    ) async -> [T]? {
+        var results: [T] = []
+        var size = maxRescanChunk
+        while true {
+            guard !Task.isCancelled, !isStale() else { return nil }
+            let clock = ContinuousClock()
+            let started = clock.now
+            guard let entries = copy(size) else { break }
+            let elapsed = copyDurationOverride ?? (clock.now - started)
+            if elapsed > Self.rescanCopyBudget {
+                size = Swift.max(Self.minRescanChunk, size / 2)
+            } else if elapsed < Self.rescanCopyBudget / 4 {
+                size = Swift.min(maxRescanChunk, size * 2)
+            }
+            afterRescanCopy?()
+            results.append(await Self.run(transform, on: entries))
+        }
+        return Task.isCancelled ? nil : results
+    }
+
+    @concurrent
+    nonisolated private static func run<T: Sendable>(
+        _ transform: @Sendable ([LogEntry]) -> T, on entries: [LogEntry]
+    ) async -> T {
+        transform(entries)
     }
 
     /// Off-main, for the session's lifetime: gives queued batches their verdicts against the

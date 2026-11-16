@@ -17,6 +17,11 @@ struct BetterConsoleApp: App {
                 workspace: appDelegate.environment.workspace)
         }
         .defaultSize(width: 1100, height: 700)
+        .commands {
+            CommandGroup(after: .newItem) { OpenLogCommands(environment: appDelegate.environment) }
+            // After, not replacing: `.saveItem` also holds Close (⌘W) and Close All (⌥⌘W).
+            CommandGroup(after: .saveItem) { SaveLogsCommand() }
+        }
 
         Settings {
             SettingsView(budget: appDelegate.environment.budget)
@@ -32,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         environment.start()
         environment.startProbeIfRequested()
+    }
+
+    /// Files opened from Finder (double-click, drag onto the app or its Dock icon, Open With)
+    /// and from the Dock's recent items: one window each.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        LogFileWindows.open(urls, environment: environment)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

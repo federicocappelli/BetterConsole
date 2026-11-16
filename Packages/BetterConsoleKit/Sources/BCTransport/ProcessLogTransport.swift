@@ -20,7 +20,7 @@ public struct ProcessLogTransport: LogTransport {
             return (URL(fileURLWithPath: "/usr/bin/log"), streamArguments)
         case .simulator:
             return (URL(fileURLWithPath: "/usr/bin/xcrun"), ["simctl", "spawn", d.id, "log"] + streamArguments)
-        case .physical:
+        case .physical, .file:
             return nil
         }
     }

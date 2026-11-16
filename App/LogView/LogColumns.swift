@@ -17,29 +17,39 @@ struct LogColumn: Identifiable, Sendable {
     let style: Style
     /// Values repeat across rows (process, subsystem, ...), so typeset text is cached.
     let cachesLines: Bool
-    let value: @MainActor @Sendable (LogEntry) -> String
+    /// The cell's text (the tooltip for a symbol), with `formatter` for timestamps. The one
+    /// source for both the cell and what Copy puts on the pasteboard; safe off the main actor
+    /// with a formatter of its own.
+    let text: @Sendable (LogEntry, LogTimestampFormatter) -> String
 
     init(
         id: String, title: String, width: CGFloat, style: Style = .text, cachesLines: Bool = false,
-        value: @escaping @MainActor @Sendable (LogEntry) -> String
+        text: @escaping @Sendable (LogEntry, LogTimestampFormatter) -> String
     ) {
         self.id = id
         self.title = title
         self.width = width
         self.style = style
         self.cachesLines = cachesLines
-        self.value = value
+        self.text = text
     }
+
+    /// The cell's text, timestamps with the table's formatter.
+    @MainActor func value(_ entry: LogEntry) -> String { text(entry, .shared) }
 
     /// Time(150), Type(40, symbol), Process(140), Subsystem(200), Category(140), Message(flexible:
     /// the last column takes the remaining width).
     static let defaultColumns: [LogColumn] = [
-        LogColumn(id: "time", title: "Time", width: 150) { LogTimestampFormatter.shared.string(from: $0.date) },
-        LogColumn(id: "type", title: "Type", width: 40, style: .levelSymbol) { $0.level.rawValue },
-        LogColumn(id: "process", title: "Process", width: 140, cachesLines: true) { $0.process },
-        LogColumn(id: "subsystem", title: "Subsystem", width: 200, cachesLines: true) { $0.subsystem ?? "" },
-        LogColumn(id: "category", title: "Category", width: 140, cachesLines: true) { $0.category ?? "" },
-        LogColumn(id: "message", title: "Message", width: 250) { firstLine(of: $0.message) },
+        LogColumn(id: "time", title: "Time", width: 150) { $1.string(from: $0.date) },
+        LogColumn(id: "type", title: "Type", width: 40, style: .levelSymbol) { e, _ in e.level.rawValue },
+        LogColumn(id: "process", title: "Process", width: 140, cachesLines: true) { e, _ in e.process },
+        LogColumn(id: "subsystem", title: "Subsystem", width: 200, cachesLines: true) { e, _ in
+            e.subsystem ?? ""
+        },
+        LogColumn(id: "category", title: "Category", width: 140, cachesLines: true) { e, _ in
+            e.category ?? ""
+        },
+        LogColumn(id: "message", title: "Message", width: 250) { e, _ in firstLine(of: e.message) },
     ]
 
     /// Longest message prefix (UTF-8 bytes) a cell gets; wider than any cell can show. The

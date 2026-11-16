@@ -1,0 +1,10 @@
+Starting app (no timestamp yet)
+2026-11-16T21:45:31.123Z INFO server[42]: listening on :8080
+2026-11-16 21:45:32,500 [ERROR] worker: job failed
+Traceback (most recent call last):
+  File "x.py", line 1
+[2026-11-16 21:45:33] WARNING something odd [com.example.app:net] happened
+2026-11-16T21:45:34+02:00 fatal: boom
+21:45:35.250 DEBUG plain message
+2026-11-16T21:45:36 [com.example.app:ui] subsystem only
+garbage line ~~~ !!!

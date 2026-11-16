@@ -17,6 +17,7 @@ let phoneB = LogDevice(id: "phone-b", name: "B Phone", kind: .physical)
 let phoneA = LogDevice(id: "phone-a", name: "A Phone", kind: .physical)
 let simA = LogDevice(id: "sim-a", name: "A Sim", kind: .simulator)
 let simB = LogDevice(id: "sim-b", name: "B Sim", kind: .simulator)
+let fileA = LogDevice(id: "file:/tmp/a.log", name: "a.log", kind: .file)
 
 struct FakeError: Error, CustomStringConvertible {
     var description: String { "child exited" }
@@ -32,9 +33,13 @@ final class FakeTransport: LogTransport {
     }
     private let state = Mutex<[Stream]>([])
     private let supported: Set<LogDevice.ID>?
+    let isFinite: Bool
 
-    /// `supported == nil` supports every device.
-    init(supported: Set<LogDevice.ID>? = nil) { self.supported = supported }
+    /// `supported == nil` supports every device. `isFinite`: streams like a file's.
+    init(supported: Set<LogDevice.ID>? = nil, isFinite: Bool = false) {
+        self.supported = supported
+        self.isFinite = isFinite
+    }
 
     func supports(_ device: LogDevice) -> Bool { supported?.contains(device.id) ?? true }
 

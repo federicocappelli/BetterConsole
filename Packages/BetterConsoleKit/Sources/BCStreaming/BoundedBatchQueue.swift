@@ -65,7 +65,7 @@ public final class BoundedBatchQueue: Sendable {
         }
     }
 
-    private let capacity: Int
+    let capacity: Int
     private let state = Mutex(State())
     /// Signals the checker that there may be work: a push, or a filter change (`wake()`).
     let wakeups: AsyncStream<Void>
