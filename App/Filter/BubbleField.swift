@@ -9,6 +9,10 @@ struct BubbleField: View {
     /// In display order (`BubbleLayout.ordered`).
     let bubbles: [Bubble]
     let seenValues: () -> SeenValues
+    /// A saved filter's name, or nil when it no longer exists (a missing link).
+    let linkName: (UUID) -> String?
+    /// Opens the filter editor (Advanced rule and link bubbles).
+    let onOpenEditor: () -> Void
     /// Called with the new list after every change.
     let onChange: ([Bubble]) -> Void
 
@@ -41,6 +45,8 @@ struct BubbleField: View {
                         bubble: bubble,
                         isSelected: selected == bubble.id,
                         isEditing: editing == bubble.id,
+                        linkName: linkName,
+                        onOpenEditor: onOpenEditor,
                         onChange: replace,
                         onRemove: { remove(bubble.id) },
                         onBeginEditing: { selected = nil; editing = bubble.id },

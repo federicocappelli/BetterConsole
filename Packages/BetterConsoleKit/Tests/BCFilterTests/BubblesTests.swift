@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import BCModel
 @testable import BCFilter
 
 private func c(_ field: FilterField, _ value: String) -> FilterCondition {
@@ -141,6 +142,82 @@ private func contents(_ bs: [Bubble]) -> [Bubble.Content] { bs.map(\.content) }
                 == contents(read2))
     }
 
+    // MARK: Links and disabled conditions
+
+    @Test func linkBubblesRoundTrip() {
+        let a = UUID(), b = UUID()
+        let mixed = FilterExpression.any([cx(.process, "Q"), cx(.subsystem, "S")])
+        let bubbles = [
+            Bubble(content: .link(b, include: false)), exc(.type, "debug"),
+            Bubble(content: .link(a, include: true)), inc(.process, "P"), adv(mixed),
+        ]
+        let tree = BubbleCodec.expression(from: bubbles)
+        #expect(tree == .all([
+            mixed, .any([cx(.process, "P")]), .link(a),
+            .not(cx(.type, "debug")), .not(.link(b)),
+        ]))
+        let back = BubbleCodec.bubbles(from: tree)
+        #expect(contents(back) == [
+            .advanced(mixed), .condition(c(.process, "P"), include: true),
+            .link(a, include: true), .condition(c(.type, "debug"), include: false),
+            .link(b, include: false),
+        ])
+        #expect(BubbleCodec.expression(from: back) == tree)
+        // Bare roots.
+        #expect(contents(BubbleCodec.bubbles(from: .link(a))) == [.link(a, include: true)])
+        #expect(contents(BubbleCodec.bubbles(from: .not(.link(a)))) == [.link(a, include: false)])
+    }
+
+    @Test func disabledBubbleKeepsGroupAndConnector() {
+        var off = c(.process, "B"); off.isEnabled = false
+        let a = inc(.process, "A"), d = Bubble(content: .condition(off, include: true))
+        let s = inc(.subsystem, "S")
+        #expect(BubbleLayout.connector(between: a, and: d) == .or)
+        #expect(BubbleLayout.connector(between: d, and: a) == .or)
+        let list = [a, s, d]
+        let ordered = BubbleLayout.ordered(list)
+        #expect(ordered.map(\.id) == [a, d, s].map(\.id))
+        let tree = BubbleCodec.expression(from: list)
+        #expect(tree == .all([
+            .any([cx(.process, "A"), .condition(off)]), .any([cx(.subsystem, "S")]),
+        ]))
+        #expect(contents(BubbleCodec.bubbles(from: tree)) == contents(ordered))
+        // A disabled exclude round-trips too.
+        let e = Bubble(content: .condition(off, include: false))
+        #expect(contents(BubbleCodec.bubbles(from: BubbleCodec.expression(from: [e])))
+                == [e.content])
+    }
+
+    @Test func hideShowLeavesLinksAndDisabledAlone() {
+        var off = c(.process, "A"); off.isEnabled = false
+        let link = Bubble(content: .link(UUID(), include: true))
+        let disabled = Bubble(content: .condition(off, include: true))
+        let list = [link, disabled]
+        // The same condition, enabled, is not a duplicate of the disabled one: appended.
+        let added = BubbleEditing.adding(c(.process, "A"), include: true, to: list)
+        #expect(added.count == 3)
+        #expect(Array(added.prefix(2)) == list)
+        // Opposite role does not replace the disabled one either.
+        let other = BubbleEditing.adding(c(.process, "A"), include: false, to: list)
+        #expect(other.count == 3)
+        #expect(Array(other.prefix(2)) == list)
+        // Adding a disabled condition never matches an existing bubble.
+        let twice = BubbleEditing.adding(off, include: true, to: list)
+        #expect(twice.count == 3)
+    }
+
+    @Test func toggleFlipsOnlyConditions() {
+        let a = inc(.process, "A")
+        let t = BubbleEditing.toggled(a)
+        #expect(t.id == a.id)
+        guard case .condition(let tc, true) = t.content else { Issue.record("not a condition"); return }
+        #expect(!tc.isEnabled)
+        #expect(BubbleEditing.toggled(t).content == a.content)
+        let x = adv(cx(.message, "X")), l = Bubble(content: .link(UUID(), include: false))
+        #expect(BubbleEditing.toggled(x) == x)
+        #expect(BubbleEditing.toggled(l) == l)
+    }
+
     // MARK: ExpressionSummary (Advanced rule tooltip)
 
     @Test func summaryOfConditionsGroupsAndNot() {
@@ -168,5 +245,63 @@ private func contents(_ bs: [Bubble]) -> [Bubble.Content] { bs.map(\.content) }
         #expect(ExpressionSummary.text(.all([])) == "(no condition)")
         #expect(ExpressionSummary.text(.all([a, .any([])])) == #"Process is "A" and (no condition)"#)
         #expect(ExpressionSummary.text(.not(.any([]))) == "not (no condition)")
+    }
+}
+
+extension BubblesTests {
+    /// A field group whose members are all disabled imposes no constraint (ES §13.2), round
+    /// trips as the same bubbles, and constrains again once one member is switched back on
+    /// (on > off > on through the bar's Enable/Disable).
+    @Test func fieldGroupWithEveryMemberDisabled() {
+        let a = inc(.process, "A"), b = inc(.process, "B"), s = inc(.subsystem, "S")
+        let inS = makeEntry(process: "Z", subsystem: "S")
+        let aInS = makeEntry(process: "A", subsystem: "S")
+        func matches(_ bubbles: [Bubble], _ entry: LogEntry) -> Bool {
+            CompiledFilter(BubbleCodec.expression(from: bubbles)).matches(entry)
+        }
+        let on = [a, b, s]
+        #expect(!matches(on, inS))
+        #expect(matches(on, aInS))
+
+        let off = [BubbleEditing.toggled(a), BubbleEditing.toggled(b), s]
+        let tree = BubbleCodec.expression(from: off)
+        var offA = c(.process, "A"), offB = c(.process, "B")
+        offA.isEnabled = false
+        offB.isEnabled = false
+        #expect(tree == .all([.any([.condition(offA), .condition(offB)]), .any([cx(.subsystem, "S")])]))
+        #expect(contents(BubbleCodec.bubbles(from: tree)) == contents(BubbleLayout.ordered(off)))
+        #expect(matches(off, inS))
+        #expect(!matches(off, makeEntry(process: "A", subsystem: "T")))
+
+        let back = [BubbleEditing.toggled(off[0]), off[1], s]
+        #expect(!matches(back, inS))
+        #expect(matches(back, aInS))
+        #expect(contents(BubbleCodec.bubbles(from: BubbleCodec.expression(from: back)))
+                == contents(BubbleLayout.ordered(back)))
+    }
+
+    /// A later group on a field that already has an include group stays Advanced (separate
+    /// root children are ANDed); a disabled member inside it is dropped at evaluation, never
+    /// merged into the include group, and a later group of only disabled members imposes
+    /// nothing.
+    @Test func disabledMemberInALaterSameFieldGroup() {
+        var offB = c(.process, "B"); offB.isEnabled = false
+        let later = FilterExpression.any([.condition(offB), cx(.process, "C")])
+        let tree = FilterExpression.all([.any([cx(.process, "A")]), later])
+        let read = BubbleCodec.bubbles(from: tree)
+        #expect(contents(read) == [.advanced(later), .condition(c(.process, "A"), include: true)])
+        #expect(BubbleCodec.expression(from: read) == tree)
+        // A AND (C, B switched off): nothing has two processes, and B never matches.
+        for p in ["A", "B", "C"] {
+            #expect(!CompiledFilter(tree).matches(makeEntry(process: p)), "\(p)")
+        }
+
+        let onlyOff = FilterExpression.any([.condition(offB)])
+        let tree2 = FilterExpression.all([.any([cx(.process, "A")]), onlyOff])
+        let read2 = BubbleCodec.bubbles(from: tree2)
+        #expect(contents(read2) == [.advanced(onlyOff), .condition(c(.process, "A"), include: true)])
+        #expect(BubbleCodec.expression(from: read2) == tree2)
+        #expect(CompiledFilter(tree2).matches(makeEntry(process: "A")))
+        #expect(!CompiledFilter(tree2).matches(makeEntry(process: "B")))
     }
 }

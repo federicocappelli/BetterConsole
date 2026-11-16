@@ -48,6 +48,16 @@ public final class FilterLibrary {
     public struct ImportReport: Sendable {
         public var imported: [SavedFilter]
         public var rejected: [(fileName: String, reason: String)]
+        /// Links no bundled or existing filter satisfies: the imported filter (by its name in
+        /// the library) and the name it links. They stay in the filter as missing links.
+        public var missingLinks: [(filter: String, link: String)]
+    }
+
+    /// What the editor's Import loads: the main filter's tree, and the links in it or in the
+    /// bundled filters it added that nothing resolved (ES §7.2).
+    public struct EditorImport: Sendable {
+        public var expression: FilterExpression?
+        public var missingLinks: [(filter: String, link: String)]
     }
 
     private struct LibraryFile: Codable {
@@ -132,24 +142,22 @@ public final class FilterLibrary {
         commit()
     }
 
+    /// Removes only this filter. Links to it in other filters keep its id and become missing
+    /// links (ES §9); `FilterWorkspace.delete` tells the devices that used them.
     public func delete(id: UUID) {
         filters.removeAll { $0.id == id }
         commit()
     }
 
+    /// Imports each file's filter and the linked filters bundled with it (ES §7.2).
     public func importFiles(_ urls: [URL]) -> ImportReport {
-        var report = ImportReport(imported: [], rejected: [])
+        var report = ImportReport(imported: [], rejected: [], missingLinks: [])
         for url in urls {
             let fileName = url.lastPathComponent
             do {
-                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                guard size <= FilterFile.maxBytes else { throw FilterImportError.tooLarge }
-                let data = try Data(contentsOf: url)
-                let decoded = try FilterFile.decode(data)
-                let filter = SavedFilter(
-                    name: uniqueName(decoded.name), expression: decoded.expression)
-                filters.append(filter)
-                report.imported.append(filter)
+                let added = insert(try read(url), includingMain: true)
+                report.imported += added.filters
+                report.missingLinks += added.missing
             } catch let error as FilterImportError {
                 report.rejected.append((fileName, error.description))
             } catch {
@@ -160,9 +168,98 @@ public final class FilterLibrary {
         return report
     }
 
-    public func export(id: UUID, to url: URL) throws {
+    /// For the editor's Import: adds the file's bundled linked filters to the library and
+    /// returns the main filter's tree with its links resolved (ES §7.2).
+    public func decodeForEditor(_ url: URL) throws -> EditorImport {
+        let added = insert(try read(url), includingMain: false)
+        if !added.filters.isEmpty { commit() }
+        return EditorImport(expression: added.main, missingLinks: added.missing)
+    }
+
+    /// Writes the saved filter and every filter it reaches through links.
+    public func export(id: UUID, to url: URL, format: FilterFileFormat = .json) throws {
         guard let filter = filter(id: id) else { throw FilterLibraryError.unknownFilter }
-        try FilterFile.encode(filter).write(to: url, options: .atomic)
+        try write(filter, to: url, format: format)
+    }
+
+    /// Writes the editor's current content under `name`, with the filters it links.
+    public func export(
+        expression: FilterExpression?, name: String, to url: URL, format: FilterFileFormat
+    ) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let main = SavedFilter(name: trimmed.isEmpty ? "Untitled" : name, expression: expression)
+        try write(main, to: url, format: format)
+    }
+
+    /// How the report names a link written by id: its filter was already gone at export.
+    static let missingAtExport = "a filter that no longer existed when this file was exported"
+
+    private func write(_ filter: SavedFilter, to url: URL, format: FilterFileFormat) throws {
+        let linked = FilterLinks.closure(of: filter.expression, in: filters)
+        try FilterFile.encode(filter, linked: linked, format: format).write(to: url, options: .atomic)
+    }
+
+    private func read(_ url: URL) throws -> DecodedFilterFile {
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= FilterFile.maxBytes else { throw FilterImportError.tooLarge }
+        let data = try Data(contentsOf: url)
+        return try FilterFile.decode(data, fallbackName: url.deletingPathExtension().lastPathComponent)
+    }
+
+    /// Adds the file's linked filters (and its main filter when `includingMain`) under unique
+    /// names, then resolves links by name: to a bundled filter first, then to an existing one
+    /// (exact case first), else left missing. Does not commit.
+    private func insert(
+        _ file: DecodedFilterFile, includingMain: Bool
+    ) -> (filters: [SavedFilter], main: FilterExpression?, missing: [(filter: String, link: String)]) {
+        let existing = filters
+        var added: [SavedFilter] = []
+        func add(_ f: SavedFilter) {
+            let new = SavedFilter(name: uniqueName(f.name), expression: f.expression)
+            filters.append(new)
+            added.append(new)
+        }
+        if includingMain { add(file.main) }
+        let bundleStart = added.count
+        file.linked.forEach(add)
+
+        let ids = Set(filters.map(\.id))
+        func resolve(_ name: String) -> UUID? {
+            if let i = file.bundleIndex(of: name) { return added[bundleStart + i].id }
+            return (existing.first { $0.name == name }
+                ?? existing.first { $0.name.lowercased() == name.lowercased() })?.id
+        }
+        func resolved(_ e: FilterExpression?, owner: String, missing: inout [(filter: String, link: String)]) -> FilterExpression? {
+            var reported = Set<String>()
+            func walk(_ e: FilterExpression) -> FilterExpression {
+                switch e {
+                case .condition: return e
+                case .all(let xs): return .all(xs.map(walk))
+                case .any(let xs): return .any(xs.map(walk))
+                case .not(let x): return .not(walk(x))
+                case .link(let id):
+                    if let name = file.linkName(id) {
+                        if let target = resolve(name) { return .link(target) }
+                        if reported.insert(name).inserted { missing.append((owner, name)) }
+                    } else if !ids.contains(id), reported.insert(Self.missingAtExport).inserted {
+                        missing.append((owner, Self.missingAtExport))
+                    }
+                    return e
+                }
+            }
+            return e.map(walk)
+        }
+
+        var missing: [(filter: String, link: String)] = []
+        // Not added, the main filter (the editor's content) is reported under its file name.
+        let editorMain = includingMain
+            ? nil : resolved(file.main.expression, owner: file.main.name, missing: &missing)
+        for (k, f) in added.enumerated() {
+            let e = resolved(f.expression, owner: f.name, missing: &missing)
+            added[k].expression = e
+            if let i = filters.firstIndex(where: { $0.id == f.id }) { filters[i].expression = e }
+        }
+        return (added, includingMain ? added[0].expression : editorMain, missing)
     }
 
     // MARK: - Private

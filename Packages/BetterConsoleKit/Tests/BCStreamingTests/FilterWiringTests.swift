@@ -186,4 +186,116 @@ final class FilterWiringTests {
         #expect(s.state == .streaming)
         #expect(s.filter == processIs("C"))
     }
+
+    /// ES §13.7: a session on A (A links B) gets the resolved tree, and rescans when B is
+    /// saved from another device, though the device's own (linked) tree didn't change.
+    @Test func linkedFilterChangeReachesSession() async {
+        let app = launch()
+        let b = app.library.add(name: "B", expression: processIs("B"))
+        let a = app.library.add(name: "A", expression: .any([processIs("A"), .link(b.id)]))
+        app.workspace.select(a.id, for: mac.id)
+        app.workspace.select(b.id, for: simA.id)
+        await app.push([mac, simA])
+        let s = app.session(mac)!
+        #expect(s.filter == .any([processIs("A"), processIs("B")]))
+        let revision = s.revision
+
+        app.workspace.setExpression(processIs("B2"), for: simA.id)
+        app.workspace.save(for: simA.id)
+
+        #expect(s.filter == .any([processIs("A"), processIs("B2")]))
+        #expect(s.revision > revision)
+        #expect(app.workspace.state(for: mac.id).expression == .any([processIs("A"), .link(b.id)]))
+
+        // Deleting B leaves a missing link, which the session drops.
+        app.workspace.delete(b.id)
+        #expect(s.filter == .any([processIs("A")]))
+
+        // A relaunch hands the new session the resolved tree too.
+        let again = launch()
+        await again.push([mac])
+        #expect(again.session(mac)?.filter == .any([processIs("A")]))
+    }
+}
+
+extension FilterWiringTests {
+    /// The app adds its own step (pointing an open filter editor at the new session) after
+    /// `connect`'s: both run, in order, for each new session, including a returning device's.
+    @Test func sessionCreatedHandlersChain() async {
+        let app = launch()
+        let f = app.library.add(name: "F", expression: processIs("A"))
+        app.workspace.select(f.id, for: simA.id)
+        var seen: [(StreamSession, FilterExpression?)] = []
+        app.registry.addSessionCreatedHandler { session in
+            // `push` adds a marker device each time; only simA's sessions matter here.
+            if session.device.id == simA.id { seen.append((session, session.filter)) }
+        }
+        await app.push([simA])
+        #expect(seen.count == 1)
+        #expect(seen.first?.0 === app.session(simA))
+        #expect(seen.first?.1 == processIs("A"))  // the filter was set first
+        await app.push([])
+        #expect(app.session(simA) == nil)
+        await app.push([simA])
+        #expect(seen.count == 2)
+        #expect(seen.last?.0 === app.session(simA))
+        #expect(seen.last?.1 == processIs("A"))
+    }
+
+    /// A link is added to a device's saved filter (saved from another device) while the
+    /// device is away: when it returns, its new session gets the resolved tree. A kept
+    /// (streaming) session gets it at once and keeps it across the return.
+    @Test func linkAddedWhileDeviceAway() async {
+        let app = launch()
+        let b = app.library.add(name: "B", expression: processIs("B"))
+        let f = app.library.add(name: "F", expression: processIs("A"))
+        for d in [mac, simA, simB] { app.workspace.select(f.id, for: d.id) }
+        await app.push([mac, simA, simB])
+        let kept = app.session(simB)!
+        kept.start()
+        await app.push([mac])
+        #expect(app.session(simA) == nil)
+        #expect(app.session(simB) === kept)
+
+        app.workspace.setExpression(.any([processIs("A"), .link(b.id)]), for: mac.id)
+        #expect(app.workspace.save(for: mac.id) == .saved)
+        let resolved = FilterExpression.any([processIs("A"), processIs("B")])
+        #expect(kept.filter == resolved)
+
+        await app.push([mac, simA, simB])
+        #expect(app.session(simA)?.filter == resolved)
+        #expect(app.session(simB) === kept)
+        #expect(kept.filter == resolved)
+        #expect(app.workspace.state(for: simA.id).expression == .any([processIs("A"), .link(b.id)]))
+    }
+
+    /// A disabled condition on > off > on, driven through the workspace into one live session:
+    /// the session's rows follow each step.
+    @Test func disabledConditionOnOffOnReachesSession() async {
+        let app = launch()
+        await app.push([mac])
+        let s = app.session(mac)!
+        s.start()
+        app.transport.yield((0..<30).map {
+            makeEntry($0, message: $0 % 2 == 0 ? "x" : "y", process: ["A", "B", "C"][Int($0) % 3])
+        })
+        #expect(await eventually { s.appendedCount == 30 })
+        func tree(_ messageOn: Bool) -> FilterExpression {
+            .all([processIs("A"), .condition(FilterCondition(
+                field: .message, match: .is, value: "x", isEnabled: messageOn))])
+        }
+        app.workspace.setExpression(tree(true), for: mac.id)
+        #expect(await eventually { !s.isFiltering })
+        #expect(s.rows.count == 5)  // A and x: ids 0, 6, 12, 18, 24
+
+        app.workspace.setExpression(tree(false), for: mac.id)
+        #expect(s.filter == tree(false))
+        #expect(await eventually { !s.isFiltering })
+        #expect(s.rows.count == 10)  // the message condition is ignored
+
+        app.workspace.setExpression(tree(true), for: mac.id)
+        #expect(await eventually { !s.isFiltering })
+        #expect(s.rows.count == 5)
+        #expect((0..<s.rows.count).allSatisfy { s.rows[$0].process == "A" && s.rows[$0].message == "x" })
+    }
 }

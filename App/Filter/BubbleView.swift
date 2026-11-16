@@ -1,12 +1,16 @@
 import SwiftUI
 import BCFilter
 
-/// One chip in the filter bar. Clicking it opens its menu; while `isEditing` it is an inline
-/// text field for the value instead.
+/// One chip in the filter bar. Clicking a condition opens its menu; while `isEditing` it is
+/// an inline text field for the value instead. Clicking an Advanced rule or a link opens the
+/// filter editor; their context menu removes them.
 struct BubbleView: View {
     let bubble: Bubble
     let isSelected: Bool
     let isEditing: Bool
+    /// A saved filter's name, or nil when it no longer exists (a missing link).
+    let linkName: (UUID) -> String?
+    let onOpenEditor: () -> Void
     let onChange: (Bubble) -> Void
     let onRemove: () -> Void
     let onBeginEditing: () -> Void
@@ -15,15 +19,36 @@ struct BubbleView: View {
     var body: some View {
         switch bubble.content {
         case .advanced(let expression):
-            Menu {
-                Button("Remove", action: onRemove)
-            } label: {
+            Button(action: onOpenEditor) {
                 Chip(style: .advanced, isSelected: isSelected) {
                     Text("Advanced rule")
                 }
             }
-            .chipMenu()
-            .help(ExpressionSummary.text(expression))
+            .chipButton()
+            .contextMenu { editorMenu }
+            .help("\(ExpressionSummary.text(expression))\nClick to edit in the filter editor.")
+        case .link(let id, let include):
+            let name = linkName(id)
+            Button(action: onOpenEditor) {
+                Chip(style: name == nil ? .invalid : include ? .include : .exclude, isSelected: isSelected) {
+                    if !include { Text("⊘") }
+                    if let name {
+                        Text("FILTER")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(name).truncationMode(.middle)
+                    } else {
+                        Text(EditorText.missingFilter).foregroundStyle(.red)
+                    }
+                }
+            }
+            .chipButton()
+            .contextMenu { editorMenu }
+            .accessibilityLabel(EditorText.linkBubble(name: name, include: include))
+            .help(
+                name == nil
+                    ? "\(EditorText.missingLinkHelp). Click to fix it in the filter editor."
+                    : "Click to edit in the filter editor.")
         case .condition(let condition, let include):
             if isEditing {
                 ValueEditor(initial: condition.value) { value in
@@ -44,32 +69,48 @@ struct BubbleView: View {
                     ) {
                         label(condition, include: include)
                     }
+                    // Disabled (ES §13.6): dimmed and struck through, as it applies nothing.
+                    .opacity(condition.isEnabled ? 1 : 0.5)
                 }
                 .chipMenu()
-                .optionalHelp(condition.valueProblem)
+                .optionalHelp(
+                    condition.valueProblem
+                        ?? (condition.isEnabled ? nil : "Disabled: this condition isn't applied."))
             }
         }
     }
 
+    /// Advanced rule and link bubbles: open the editor or remove.
+    @ViewBuilder
+    private var editorMenu: some View {
+        Button("Edit in Filter Editor", action: onOpenEditor)
+        Divider()
+        Button("Remove", action: onRemove)
+    }
+
+    /// A disabled condition strikes through every part, not just the value.
     @ViewBuilder
     private func label(_ c: FilterCondition, include: Bool) -> some View {
+        let struck = !c.isEnabled
         if !include {
-            Text("⊘")
-            Text("not").italic()
+            Text("⊘").strikethrough(struck)
+            Text("not").italic().strikethrough(struck)
         }
         Text(c.field.title.uppercased())
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
-        Text(c.match.title).foregroundStyle(.secondary)
-        Text(c.value)
-            .strikethrough(!include)
+            .strikethrough(struck)
+        if c.field == .extra { Text(c.key ?? "").foregroundStyle(.secondary).strikethrough(struck) }
+        Text(c.match.title(for: c.field)).foregroundStyle(.secondary).strikethrough(struck)
+        Text(c.match == .between ? "\(c.value) – \(c.upperValue ?? "")" : c.value)
+            .strikethrough(struck)
             .truncationMode(.middle)
     }
 
     @ViewBuilder
     private func menu(_ c: FilterCondition, include: Bool) -> some View {
         Menu("Field") {
-            ForEach(FilterField.allCases, id: \.self) { field in
+            ForEach(Self.barFields(current: c.field), id: \.self) { field in
                 Toggle(field.title, isOn: checked(c.field == field) {
                     update(c.movedTo(field), include: include)
                 })
@@ -77,7 +118,7 @@ struct BubbleView: View {
         }
         Menu("Match") {
             ForEach(c.field.allowedMatches, id: \.self) { match in
-                Toggle(match.title, isOn: checked(c.match == match) {
+                Toggle(match.title(for: c.field), isOn: checked(c.match == match) {
                     var edited = c
                     edited.match = match
                     update(edited, include: include)
@@ -87,6 +128,7 @@ struct BubbleView: View {
         Divider()
         Toggle("Include", isOn: checked(include) { update(c, include: true) })
         Toggle("Exclude", isOn: checked(!include) { update(c, include: false) })
+        Button(c.isEnabled ? "Disable" : "Enable") { onChange(BubbleEditing.toggled(bubble)) }
         Divider()
         if c.field == .type {
             Menu("Edit Value") {
@@ -103,6 +145,12 @@ struct BubbleView: View {
         }
         Divider()
         Button("Remove", action: onRemove)
+    }
+
+    /// Fields the bar can edit. Extra data and Time of day need the key / end editors of
+    /// later tasks, so they are offered only as the bubble's current field (e.g. imported).
+    private static func barFields(current: FilterField) -> [FilterField] {
+        FilterField.allCases.filter { ![.extra, .timeOfDay].contains($0) || $0 == current }
     }
 
     private func update(_ c: FilterCondition, include: Bool) {
@@ -199,6 +247,11 @@ extension View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
+    }
+
+    /// A bubble-shaped button: the label as drawn.
+    fileprivate func chipButton() -> some View {
+        buttonStyle(.plain).fixedSize()
     }
 
     @ViewBuilder

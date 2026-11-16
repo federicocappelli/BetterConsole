@@ -18,8 +18,10 @@ struct FilterBar: View {
     @State private var nameSheet: NameSheetRequest?
     @State private var unsavedPick: FilterPick?
     @State private var deleteRequest: DeleteRequest?
-    @State private var importRejections: ImportRejections?
+    @State private var importProblems: ImportProblems?
     @State private var exportError: String?
+    /// Why the last Save was refused (ES §9), shown as an alert.
+    @State private var saveRefusal: String?
 
     init(session: StreamSession, library: FilterLibrary, workspace: FilterWorkspace) {
         self.session = session
@@ -40,6 +42,8 @@ struct FilterBar: View {
             BubbleField(
                 bubbles: bubbles,
                 seenValues: { [session] in session.seenValues },
+                linkName: { [library] in library.filter(id: $0)?.name },
+                onOpenEditor: openEditor,
                 onChange: apply)
             .frame(maxWidth: .infinity)
             FilteringProgress(session: session)
@@ -72,8 +76,14 @@ struct FilterBar: View {
             onSave: { save(then: $0) },
             onDiscard: { workspace.select($0.filterID, for: deviceID) })
         .deleteFilterConfirmation($deleteRequest) { workspace.delete($0.id) }
-        .importRejectionsAlert($importRejections)
+        .importProblemsAlert($importProblems)
         .filterErrorAlert($exportError)
+        .alert(
+            saveRefusal ?? "",
+            isPresented: Binding(get: { saveRefusal != nil }, set: { if !$0 { saveRefusal = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        }
     }
 
     // MARK: Dropdown
@@ -117,14 +127,21 @@ struct FilterBar: View {
 
     private var canSave: Bool { isUntitled ? !bubbles.isEmpty : state.isEdited }
 
-    /// Untitled asks for a name first (as Save As).
+    /// Untitled asks for a name first (as Save As). A refused save says why and keeps the
+    /// edits: the pick waiting on it is not run (ES §9).
     private func save(then pick: FilterPick?) {
         if isUntitled {
             nameSheet = NameSheetRequest(kind: .saveAs, initialName: name, then: pick)
             return
         }
-        workspace.save(for: deviceID)
-        if let pick { workspace.select(pick.filterID, for: deviceID) }
+        let filterName = name
+        let outcome = EditorText.barSave(workspace.save(for: deviceID), filterName: filterName)
+        if outcome.runsPendingPick, let pick { workspace.select(pick.filterID, for: deviceID) }
+        switch outcome {
+        case .saved: break
+        case .needsName: nameSheet = NameSheetRequest(kind: .saveAs, initialName: filterName, then: pick)
+        case .refused(let reason): saveRefusal = reason
+        }
     }
 
     private func commitName(_ name: String, for request: NameSheetRequest) {
@@ -148,13 +165,7 @@ struct FilterBar: View {
                 }
             }
             .disabled(isUntitled)
-            // Menus do not show `.help` tooltips, so the hint is also the item's subtitle.
-            Button {} label: {
-                Text("Edit")
-                Text("Coming soon")
-            }
-            .disabled(true)
-            .help("Coming soon")
+            Button("Edit", action: openEditor)
             Button("Duplicate") { workspace.duplicate(for: deviceID) }
                 .disabled(isUntitled)
             Divider()
@@ -163,7 +174,10 @@ struct FilterBar: View {
             Button("Import…", action: importFiles)
             Divider()
             Button("Delete…") {
-                if let id = state.basedOn { deleteRequest = DeleteRequest(id: id, name: name) }
+                if let id = state.basedOn {
+                    deleteRequest = DeleteRequest(
+                        id: id, name: name, dependents: workspace.directDependentsNames(of: id))
+                }
             }
             .disabled(isUntitled)
         } label: {
@@ -175,10 +189,18 @@ struct FilterBar: View {
         .help("More filter actions")
     }
 
+    /// The device's filter, including unsaved edits, in its editor window (ES §8.1).
+    private func openEditor() {
+        FilterEditorWindows.open(
+            deviceID: deviceID, deviceName: session.device.name, session: session,
+            workspace: workspace, library: library)
+    }
+
+    /// The saved filter as it is in the library, in the format picked in the save panel.
     private func export() {
-        guard let id = state.basedOn, let url = FilterPanels.chooseExportURL(name: name) else { return }
+        guard let id = state.basedOn, let choice = FilterPanels.chooseExport(name: name) else { return }
         do {
-            try library.export(id: id, to: url)
+            try library.export(id: id, to: choice.url, format: choice.format)
         } catch {
             exportError = error.localizedDescription
         }
@@ -186,8 +208,7 @@ struct FilterBar: View {
 
     private func importFiles() {
         guard let urls = FilterPanels.chooseImportFiles() else { return }
-        let report = library.importFiles(urls)
-        if !report.rejected.isEmpty { importRejections = ImportRejections(files: report.rejected) }
+        importProblems = ImportProblems(library.importFiles(urls))
     }
 
     // MARK: Bubbles
@@ -196,8 +217,10 @@ struct FilterBar: View {
         let ordered = BubbleLayout.ordered(edited)
         let expression = BubbleCodec.expression(from: ordered)
         bubbles = ordered
-        if expression != BubbleCodec.expression(from: BubbleCodec.bubbles(from: state.expression)) {
-            workspace.setExpression(expression, for: deviceID)
+        if expression != BubbleCodec.expression(from: BubbleCodec.bubbles(from: state.expression)),
+           !workspace.setExpression(expression, for: deviceID) {
+            // Refused (nested past the depth cap): show the device's filter again.
+            bubbles = BubbleCodec.bubbles(from: state.expression)
         }
     }
 }

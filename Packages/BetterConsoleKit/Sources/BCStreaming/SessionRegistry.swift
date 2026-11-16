@@ -138,3 +138,15 @@ public final class SessionRegistry {
         }
     }
 }
+
+extension SessionRegistry {
+    /// Runs `handler` for each new session after whatever `onSessionCreated` already does
+    /// (`connect(registry:workspace:)` sets the session's filter there), keeping both.
+    public func addSessionCreatedHandler(_ handler: @escaping @MainActor (StreamSession) -> Void) {
+        let previous = onSessionCreated
+        onSessionCreated = { session in
+            previous?(session)
+            handler(session)
+        }
+    }
+}

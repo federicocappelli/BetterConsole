@@ -31,6 +31,21 @@ import Testing
                 == #"{"all":[{"condition":{"field":"pid","match":"is","value":"1"}}]}"#)
     }
 
+    @Test func linkKeyAndUpperValueShape() throws {
+        let id = try #require(UUID(uuidString: "6F1C2B3A-0000-4000-8000-000000000001"))
+        #expect(try json(.link(id)) == #"{"link":{"id":"6F1C2B3A-0000-4000-8000-000000000001"}}"#)
+        let extra = FilterExpression.condition(
+            FilterCondition(field: .extra, match: .is, value: "v", key: "k"))
+        #expect(try json(extra) == #"{"condition":{"field":"extra","key":"k","match":"is","value":"v"}}"#)
+        let time = FilterExpression.condition(FilterCondition(
+            field: .timeOfDay, match: .between, value: "22:00", upperValue: "02:00"))
+        #expect(try json(time)
+            == #"{"condition":{"field":"timeOfDay","match":"between","upperValue":"02:00","value":"22:00"}}"#)
+        for e in [FilterExpression.link(id), extra, time] {
+            #expect(try JSONDecoder().decode(FilterExpression.self, from: JSONEncoder().encode(e)) == e)
+        }
+    }
+
     @Test func isEnabledOmittedWhenTrue() throws {
         #expect(try !json(c(.pid, .is, "1")).contains("isEnabled"))
         #expect(try json(c(.pid, .is, "1", false)).contains(#""isEnabled":false"#))

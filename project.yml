@@ -22,6 +22,16 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - path: App
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # The builder's private row drag (App/Filter/Editor/BuilderDrag.swift).
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: app.betterconsole.builder-node
+            UTTypeDescription: BetterConsole filter row
+            UTTypeConformsTo: [public.data]
     scheme:
       testTargets:
         - BetterConsoleTests
@@ -62,9 +72,15 @@ targets:
       - path: App/LogView/FollowTracker.swift
       - path: App/LogView/LogColumns.swift
       - path: App/LogView/RowCopy.swift
+      - path: App/Filter/Editor/EditorText.swift
+      - path: App/Filter/Editor/EditorUndoRouting.swift
+      - path: App/Filter/Editor/PredicateTextMapping.swift
+      - path: App/Filter/Editor/BuilderDrag.swift
     dependencies:
       - package: BetterConsoleKit
         product: BCModel
+      - package: BetterConsoleKit
+        product: BCFilter
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.betterconsole.BetterConsoleTests

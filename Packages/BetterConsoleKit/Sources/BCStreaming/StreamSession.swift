@@ -83,8 +83,16 @@ public final class StreamSession {
     /// Largest rescan chunk; the chunk shrinks below it while copying one takes over 4 ms.
     @ObservationIgnored var maxRescanChunk = 10_000
     @ObservationIgnored private var rescanChunk = 10_000
-    /// Called after each rescan chunk is copied from the store, before it is evaluated (tests).
+    /// Called after each rescan or match-count chunk is copied from the store, before it is
+    /// evaluated (tests).
     @ObservationIgnored var afterRescanCopy: (() -> Void)?
+    /// The match count's chunk size, kept from one count to the next (the editor recounts
+    /// every 2 s), adapted as the rescan's is.
+    @ObservationIgnored private var countChunk = 10_000
+    /// Used instead of the measured time of each chunk copy (tests).
+    @ObservationIgnored var copyDurationOverride: Duration?
+    /// Holds the off-main checker while closed (tests).
+    @ObservationIgnored let checkerGate = CheckerGate()
     static let rescanCopyBudget = Duration.milliseconds(4)
     static let minRescanChunk = 500
 
@@ -105,8 +113,8 @@ public final class StreamSession {
             rows.dropEvicted()
             revision += 1
         }
-        checker = Task.detached(priority: .userInitiated) { [queue, filterSlot] in
-            await Self.runChecker(queue: queue, slot: filterSlot)
+        checker = Task.detached(priority: .userInitiated) { [queue, filterSlot, checkerGate] in
+            await Self.runChecker(queue: queue, slot: filterSlot, gate: checkerGate)
         }
     }
 
@@ -352,11 +360,43 @@ public final class StreamSession {
         }
     }
 
+    /// How many stored entries `expression` (already resolved: no links) matches, for the
+    /// editor's preview (ES §8.5); nil once the calling task is cancelled. Counted like the
+    /// rescan: newest first, chunks copied on main (each copy under 4 ms) and checked off main,
+    /// with a cancellation check before every entry when the filter has a regex. The chunk
+    /// size adapts as the rescan's does and carries over to the next count. Leaves `filter`
+    /// and `rows` alone, and can run alongside a rescan.
+    ///
+    /// `total` is the number of entries counted: those stored when the count starts, minus any
+    /// evicted (or cleared) before their chunk is copied. A chunk once copied stays counted
+    /// even if it is evicted while being checked. Entries arriving during the count are not
+    /// included. With no filter (or one matching everything) both are the stored count.
+    public func countMatches(_ expression: FilterExpression?) async -> MatchCount? {
+        guard !Task.isCancelled else { return nil }
+        let compiled = CompiledFilter(expression)
+        guard !compiled.matchesEverything else {
+            return MatchCount(matched: store.count, total: store.count)
+        }
+        var cursor = store.removedCount + store.count
+        var size = Swift.min(countChunk, maxRescanChunk)
+        var counted = MatchCount(matched: 0, total: 0)
+        while let chunk = copyChunk(below: &cursor, size: &size) {
+            countChunk = size
+            guard let matches = await Self.evaluate(chunk, filter: compiled), !Task.isCancelled
+            else { return nil }
+            counted.matched += matches.count
+            counted.total += chunk.entries.count
+        }
+        return counted
+    }
+
     /// Off-main, for the session's lifetime: gives queued batches their verdicts against the
     /// current filter, oldest first, and again whenever the filter changes. Idle without a
     /// filter (the drain then takes batches unchecked). A batch whose filter changes mid-check
     /// is abandoned and checked again; with a regex that is noticed at the next entry.
-    nonisolated private static func runChecker(queue: BoundedBatchQueue, slot: FilterSlot) async {
+    nonisolated private static func runChecker(
+        queue: BoundedBatchQueue, slot: FilterSlot, gate: CheckerGate
+    ) async {
         var wakeups = queue.wakeups.makeAsyncIterator()
         while !Task.isCancelled {
             let (generation, filter) = slot.current()
@@ -375,6 +415,7 @@ public final class StreamSession {
                             break
                         }
                     }
+                    gate.pass()
                     matches.append(filter.matches(entry))
                 }
                 if !stale {
@@ -386,30 +427,41 @@ public final class StreamSession {
         }
     }
 
-    /// Main-actor step: copies the next chunk below `cursor` (newest first) and moves the
-    /// cursor down. Returns nil, ending the rescan, when nothing is left above the evicted part.
+    /// Main-actor step of the rescan: the next chunk below `cursor`, or nil (ending the
+    /// rescan) once the filter changed or nothing is left above the evicted part.
     private func takeRescanChunk(
         below cursor: inout Int, generation: UInt64
     ) -> (entries: [LogEntry], firstPosition: Int)? {
         guard filterSlot.current().0 == generation else { return nil }
-        let removed = store.removedCount
-        guard cursor > removed else {
+        guard let chunk = copyChunk(below: &cursor, size: &rescanChunk) else {
             isFiltering = false
             filterProgress = 1
             rescanTask = nil
             return nil
         }
-        let first = Swift.max(removed, cursor - rescanChunk)
+        return chunk
+    }
+
+    /// Main-actor step shared by the rescan and the match count: copies up to `size` stored
+    /// entries below `cursor` (newest first) and moves the cursor down. `size` halves (down to
+    /// `minRescanChunk`) while a copy takes over 4 ms and doubles (up to `maxRescanChunk`)
+    /// while it is quick. Nil when nothing is left above the evicted part.
+    private func copyChunk(
+        below cursor: inout Int, size: inout Int
+    ) -> (entries: [LogEntry], firstPosition: Int)? {
+        let removed = store.removedCount
+        guard cursor > removed else { return nil }
+        let first = Swift.max(removed, cursor - size)
         let clock = ContinuousClock()
         let started = clock.now
         var entries: [LogEntry] = []
         entries.reserveCapacity(cursor - first)
         for p in first..<cursor { entries.append(store[p - removed]) }
-        let elapsed = clock.now - started
+        let elapsed = copyDurationOverride ?? (clock.now - started)
         if elapsed > Self.rescanCopyBudget {
-            rescanChunk = Swift.max(Self.minRescanChunk, rescanChunk / 2)
+            size = Swift.max(Self.minRescanChunk, size / 2)
         } else if elapsed < Self.rescanCopyBudget / 4 {
-            rescanChunk = Swift.min(maxRescanChunk, rescanChunk * 2)
+            size = Swift.min(maxRescanChunk, size * 2)
         }
         cursor = first
         afterRescanCopy?()
@@ -454,6 +506,17 @@ public final class StreamSession {
     }
 }
 
+/// The editor preview's "Would match `matched` of `total` messages" (ES §8.5).
+public struct MatchCount: Sendable, Equatable {
+    public var matched: Int
+    public var total: Int
+
+    public init(matched: Int, total: Int) {
+        self.matched = matched
+        self.total = total
+    }
+}
+
 /// A stream's way into the session's queue. Closing it, under its lock, guarantees no push
 /// from that stream lands afterwards, even one already past the stream's last check.
 private final class StreamInlet: Sendable {
@@ -469,4 +532,26 @@ private final class StreamInlet: Sendable {
     }
 
     func close() { isOpen.withLock { $0 = false } }
+}
+
+/// A test hook in the off-main checker: while closed, the checker waits before checking its
+/// next entry, so a test can keep it behind (inside a batch) for exactly as long as it needs.
+/// Open, it costs one atomic load per entry.
+final class CheckerGate: Sendable {
+    private let closed = Atomic<Bool>(false)
+    private let holding = Atomic<Bool>(false)
+
+    func close() { closed.store(true, ordering: .sequentiallyConsistent) }
+    func open() { closed.store(false, ordering: .sequentiallyConsistent) }
+
+    /// The checker is waiting at the gate.
+    var isHolding: Bool { holding.load(ordering: .sequentiallyConsistent) }
+
+    /// Called by the checker before each entry; returns once the gate is open.
+    func pass() {
+        guard closed.load(ordering: .acquiring) else { return }
+        holding.store(true, ordering: .sequentiallyConsistent)
+        while closed.load(ordering: .sequentiallyConsistent) { usleep(1_000) }
+        holding.store(false, ordering: .sequentiallyConsistent)
+    }
 }

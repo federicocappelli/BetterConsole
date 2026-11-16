@@ -10,4 +10,15 @@ public enum LogLevel: String, Sendable {
     public init(messageType: String?) {
         self = messageType.flatMap(LogLevel.init(rawValue:)) ?? .default
     }
+
+    /// `log`'s numeric `messageType` order, used by Type comparisons (ES §5.3).
+    public var logOrder: Int {
+        switch self {
+        case .default: 0
+        case .info: 1
+        case .debug: 2
+        case .error: 16
+        case .fault: 17
+        }
+    }
 }

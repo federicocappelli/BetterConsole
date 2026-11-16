@@ -7,8 +7,8 @@ struct LogColumn: Identifiable, Sendable {
     enum Style: Sendable {
         /// Plain single-line text from `value`.
         case text
-        /// A colored dot for `LogEntry.level`; `value` becomes the tooltip.
-        case levelDot
+        /// A coloured SF Symbol for `LogEntry.level`; `value` becomes the tooltip.
+        case levelSymbol
     }
 
     let id: String
@@ -31,11 +31,11 @@ struct LogColumn: Identifiable, Sendable {
         self.value = value
     }
 
-    /// Time(150), Type(40, dot), Process(140), Subsystem(200), Category(140), Message(flexible:
+    /// Time(150), Type(40, symbol), Process(140), Subsystem(200), Category(140), Message(flexible:
     /// the last column takes the remaining width).
     static let defaultColumns: [LogColumn] = [
         LogColumn(id: "time", title: "Time", width: 150) { LogTimestampFormatter.shared.string(from: $0.date) },
-        LogColumn(id: "type", title: "Type", width: 40, style: .levelDot) { $0.level.rawValue },
+        LogColumn(id: "type", title: "Type", width: 40, style: .levelSymbol) { $0.level.rawValue },
         LogColumn(id: "process", title: "Process", width: 140, cachesLines: true) { $0.process },
         LogColumn(id: "subsystem", title: "Subsystem", width: 200, cachesLines: true) { $0.subsystem ?? "" },
         LogColumn(id: "category", title: "Category", width: 140, cachesLines: true) { $0.category ?? "" },
@@ -66,10 +66,24 @@ extension LogTimestampFormatter {
 }
 
 extension LogLevel {
-    /// Type dot color: default/info/debug grey, error yellow, fault red.
-    var dotColor: NSColor {
+    /// The Type column's SF Symbol: one `.circle` symbol per level.
+    var symbolName: String {
         switch self {
-        case .default, .info, .debug: .systemGray
+        case .default: "circle"
+        case .info: "info.circle"
+        case .debug: "ladybug.circle"
+        case .error: "exclamationmark.circle"
+        case .fault: "xmark.circle"
+        }
+    }
+
+    /// The Type column's symbol colour: default grey, info blue, debug purple, error yellow,
+    /// fault red.
+    var symbolColor: NSColor {
+        switch self {
+        case .default: .systemGray
+        case .info: .systemBlue
+        case .debug: .systemPurple
         case .error: .systemYellow
         case .fault: .systemRed
         }

@@ -292,9 +292,10 @@ struct StreamSessionFilterTests {
 
     // MARK: Filter slower than the input (MVP spec §6.5.1: bounded queue, drop and count)
 
-    /// Process A, or a message regex that never matches `slowMessage` and takes about 1 ms
-    /// per entry to say so (`(a+)+$` backtracks on a run of a's ending in "!"). Matches
-    /// exactly the process A entries.
+    /// Process A, or a message regex that never matches `slowMessage` and takes far longer
+    /// per entry than a plain comparison to say so (`(a+)+$` backtracks on a run of a's ending
+    /// in "!"; how long depends on the machine, so tests that need the checker to be behind
+    /// hold it with `checkerGate` instead). Matches exactly the process A entries.
     var slowFilter: FilterExpression {
         .any([processIs("A"),
               .condition(FilterCondition(field: .message, match: .regex, value: "(a+)+$"))])
@@ -335,18 +336,21 @@ struct StreamSessionFilterTests {
     }
 
     /// Pausing while the checker is behind: entries already received still reach the store
-    /// and the index once checked (off main), judged by the filter.
+    /// and the index once checked (off main), judged by the filter. The checker is held inside
+    /// the batch by its test gate, so it is behind for as long as the test needs.
     @Test func pauseWhileCheckerBehindKeepsEverything() async {
         let s = makeSession()
-        s.setFilter(slowFilter)
+        s.checkerGate.close()
+        s.setFilter(processIs("A"))
         s.start()
-        // 14 a's: about 3 ms per B or C entry, several seconds for the batch.
-        transport.yield(slowEntries(0..<1_500, message: String(repeating: "a", count: 14) + "!"))
-        #expect(await eventually { s.queue.count == 1_500 })  // received, not yet checked
+        transport.yield(entries(0..<1_500))
+        // Received, and the checker is stuck on the batch's first entry.
+        #expect(await eventually { s.queue.count == 1_500 && s.checkerGate.isHolding })
         s.pause()
         #expect(s.state == .paused)
         #expect(s.appendedCount == 0)
-        #expect(await eventually(timeout: .seconds(20)) { s.appendedCount == 1_500 })
+        s.checkerGate.open()
+        #expect(await eventually { s.appendedCount == 1_500 })
         #expect(rowIDs(s) == expectedIDs(s, processIs("A")))
         #expect(s.rows.count == 500)
         #expect(s.droppedCount == 0)
@@ -377,18 +381,23 @@ struct StreamSessionFilterTests {
         #expect(s.rows.count == 120)
     }
 
-    /// Clear while unchecked batches wait: they are discarded with the rest.
+    /// Clear while unchecked batches wait: they are discarded with the rest. The checker is
+    /// held inside the batch by its test gate until after the clear.
     @Test func clearWhileCheckerBehindDiscardsQueued() async {
         let s = makeSession()
-        s.setFilter(slowFilter)
+        s.checkerGate.close()
+        s.setFilter(processIs("B"))
         s.start()
-        transport.yield(slowEntries(0..<300))
-        try? await Task.sleep(for: .milliseconds(20))
+        let appended = s.appendedCount
+        transport.yield(entries(0..<300))
+        #expect(await eventually { s.queue.count == 300 && s.checkerGate.isHolding })
         s.clear()
         #expect(s.queue.count == 0)
         s.setFilter(processIs("A"))
+        s.checkerGate.open()
         transport.yield(entries(1_000..<1_030))
-        #expect(await eventually { s.appendedCount == 30 })
+        #expect(await eventually { s.appendedCount - appended == 30 })
+        #expect(s.appendedCount - appended == 30)  // none of the cleared 300
         #expect(s.store.count == 30)
         #expect(rowIDs(s) == expectedIDs(s, processIs("A")))
         #expect(s.rows.count == 10)
@@ -445,5 +454,202 @@ struct StreamSessionFilterTests {
         #expect(rowIDs(s) == expectedIDs(s, processIs("A")))
         #expect(s.rows.count == 1_000)
         #expect(await eventually(timeout: .seconds(5)) { s.runningRescans == 0 })
+    }
+
+    // MARK: Match count for the editor preview (ES §8.5)
+
+    @Test func countMatchesCountsStore() async {
+        let s = makeSession()
+        s.maxRescanChunk = 700  // several chunks
+        s.start()
+        stream(0..<5_000, batch: 500)
+        #expect(await settle(s, total: 5_000))
+        var copies = 0
+        s.afterRescanCopy = { copies += 1 }
+        let count = await s.countMatches(processIs("B"))
+        #expect(count == MatchCount(matched: expectedIDs(s, processIs("B")).count, total: 5_000))
+        #expect(count?.matched == 1_667)
+        #expect(copies >= 8)  // chunked like the rescan
+        // A filter with a regex (checked per entry) counts the same.
+        let regex = FilterExpression.condition(
+            FilterCondition(field: .process, match: .regex, value: "A|C"))
+        #expect(await s.countMatches(regex)
+            == MatchCount(matched: expectedIDs(s, regex).count, total: 5_000))
+    }
+
+    /// A recount starts at the chunk size the last count ended with, not back at the
+    /// largest chunk (copies are made to look slow, so each one halves the size).
+    @Test func recountKeepsTheAdaptedChunkSize() async {
+        let s = makeSession()
+        s.maxRescanChunk = 4_000
+        s.start()
+        stream(0..<10_000, batch: 1_000)
+        #expect(await settle(s, total: 10_000))
+        s.copyDurationOverride = .milliseconds(10)
+        var copies = 0
+        s.afterRescanCopy = { copies += 1 }
+        // 4,000, 2,000, 1,000, 500, then 500s: 9 copies.
+        #expect(await s.countMatches(processIs("A"))?.matched == 3_334)
+        #expect(copies == 9)
+        copies = 0
+        // 500 from the start: 20 copies.
+        #expect(await s.countMatches(processIs("B"))?.matched == 3_333)
+        #expect(copies == 20)
+        // Quick copies grow it again, as in the rescan.
+        s.copyDurationOverride = .zero
+        copies = 0
+        #expect(await s.countMatches(processIs("C"))?.matched == 3_333)
+        #expect(copies == 5)  // 500, 1,000, 2,000, 4,000, then the last 2,500
+    }
+
+    @Test func countWithNoFilterIsTotal() async {
+        let s = makeSession()
+        #expect(await s.countMatches(nil) == MatchCount(matched: 0, total: 0))
+        #expect(await s.countMatches(processIs("A")) == MatchCount(matched: 0, total: 0))
+        s.start()
+        stream(0..<1_234)
+        #expect(await settle(s, total: 1_234))
+        #expect(await s.countMatches(nil) == MatchCount(matched: 1_234, total: 1_234))
+        // Every condition invalid: matches everything.
+        let invalid = FilterExpression.condition(
+            FilterCondition(field: .message, match: .regex, value: "("))
+        #expect(await s.countMatches(invalid) == MatchCount(matched: 1_234, total: 1_234))
+    }
+
+    /// The count leaves the session's filter, rows and revision alone, with the session
+    /// filtered (by another filter) and unfiltered.
+    @Test func countDoesNotChangeRows() async {
+        let s = makeSession()
+        s.maxRescanChunk = 500
+        s.start()
+        stream(0..<3_000, batch: 500)
+        #expect(await settle(s, total: 3_000))
+        s.setFilter(processIs("B"))
+        #expect(await settle(s, total: 3_000))
+        let ids = rowIDs(s)
+        let revision = s.revision
+        let resets = s.rows.resetCount
+        #expect(await s.countMatches(processIs("A"))?.matched == 1_000)
+        #expect(s.filter == processIs("B"))
+        #expect(rowIDs(s) == ids)
+        #expect(s.revision == revision)
+        #expect(s.rows.resetCount == resets)
+        #expect(!s.isFiltering)
+        #expect(s.filterProgress == 1)
+
+        s.setFilter(nil)
+        #expect(await s.countMatches(processIs("A"))?.matched == 1_000)
+        #expect(s.filter == nil)
+        #expect(!s.rows.isFiltered)
+        #expect(s.rows.count == 3_000)
+    }
+
+    /// Catastrophic backtracking: cancelling the counting task returns nil within 1 s.
+    @Test func countCancelsPromptly() async {
+        let s = makeSession()
+        s.start()
+        let message = String(repeating: "a", count: 24) + "!"
+        transport.yield((0..<2_000).map { makeEntry($0, message: message, process: "A") })
+        #expect(await settle(s, total: 2_000))
+        let regex = FilterExpression.condition(
+            FilterCondition(field: .message, match: .regex, value: "(a+)+$"))
+        let counting = Task { await s.countMatches(regex) }
+        try? await Task.sleep(for: .milliseconds(100))
+        let clock = ContinuousClock()
+        let cancelled = clock.now
+        counting.cancel()
+        let result = await counting.value
+        #expect(clock.now - cancelled < .seconds(1))
+        #expect(result == nil)
+    }
+
+    /// A count cancelled before it starts returns nil, even with no filter.
+    @Test func countAlreadyCancelledIsNil() async {
+        let s = makeSession()
+        s.start()
+        stream(0..<100)
+        #expect(await settle(s, total: 100))
+        let counting = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await s.countMatches(processIs("A"))
+        }
+        #expect(await counting.value == nil)
+    }
+
+    /// Eviction mid-count: entries evicted before their chunk is copied are not counted (in
+    /// matched or total); chunks already copied stay counted.
+    @Test func countEvictionDuringCount() async {
+        let budget = MemoryBudget()
+        let s = makeSession(budget: budget)
+        s.maxRescanChunk = 1_000
+        s.start()
+        stream(0..<10_000, batch: 1_000)
+        #expect(await settle(s, total: 10_000))
+        let perEntry = s.store.estimatedBytes / s.store.count
+        var copies = 0
+        s.afterRescanCopy = {
+            copies += 1
+            guard copies == 3 else { return }  // [7000, 10000) copied; keep [6500, 10000)
+            budget.limitBytes = perEntry * 3_500
+        }
+        let count = await s.countMatches(processIs("A"))
+        #expect(copies == 4)  // the last chunk is the 500 entries left above the evicted part
+        #expect(s.store.removedCount == 6_500)
+        #expect(count == MatchCount(matched: expectedIDs(s, processIs("A")).count, total: 3_500))
+        #expect(s.filter == nil)
+    }
+
+    /// Clear mid-count: the count covers only what was copied before the clear.
+    @Test func countClearedMidCount() async {
+        let s = makeSession()
+        s.maxRescanChunk = 1_000
+        s.start()
+        stream(0..<10_000, batch: 1_000)
+        #expect(await settle(s, total: 10_000))
+        var copies = 0
+        s.afterRescanCopy = {
+            copies += 1
+            if copies == 2 { s.clear() }
+        }
+        let count = await s.countMatches(processIs("A"))
+        #expect(copies == 2)
+        #expect(count == MatchCount(
+            matched: (8_000..<10_000).filter { $0 % 3 == 0 }.count, total: 2_000))
+    }
+
+    /// Entries arriving during the count are not included: it counts what was stored when it
+    /// started (ES §8.5: the count does not follow new messages).
+    @Test func countIgnoresEntriesArrivingDuringCount() async {
+        let s = makeSession()
+        s.maxRescanChunk = 1_000
+        s.start()
+        stream(0..<5_000, batch: 1_000)
+        #expect(await settle(s, total: 5_000))
+        var copies = 0
+        s.afterRescanCopy = {
+            copies += 1
+            if copies == 1 { self.stream(5_000..<6_000, batch: 1_000) }
+        }
+        let count = await s.countMatches(processIs("A"))
+        #expect(count == MatchCount(
+            matched: (0..<5_000).filter { $0 % 3 == 0 }.count, total: 5_000))
+        #expect(await settle(s, total: 6_000))
+        #expect(await s.countMatches(processIs("A"))
+            == MatchCount(matched: 2_000, total: 6_000))
+    }
+
+    /// A count runs alongside a rescan of a different filter; neither disturbs the other.
+    @Test func countDuringRescan() async {
+        let s = makeSession()
+        s.maxRescanChunk = 1_000
+        s.start()
+        stream(0..<20_000, batch: 1_000)
+        #expect(await settle(s, total: 20_000))
+        s.setFilter(processIs("B"))
+        #expect(s.isFiltering)
+        let count = await s.countMatches(processIs("A"))
+        #expect(count == MatchCount(matched: expectedIDs(s, processIs("A")).count, total: 20_000))
+        #expect(await settle(s, total: 20_000))
+        #expect(rowIDs(s) == expectedIDs(s, processIs("B")))
     }
 }

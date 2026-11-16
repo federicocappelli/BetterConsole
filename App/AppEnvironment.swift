@@ -24,6 +24,11 @@ final class AppEnvironment {
         self.workspace = workspace
         // Sessions start with their device's filter; workspace changes reach live sessions.
         connect(registry: registry, workspace: workspace)
+        // An open filter editor counts its preview on the device's new session once the
+        // device returns (ES §8.1).
+        registry.addSessionCreatedHandler { session in
+            FilterEditorWindows.updateSession(session, forDevice: session.device.id)
+        }
     }
 
     /// Starts device discovery for the app's lifetime. Idempotent.
@@ -84,7 +89,8 @@ final class AppEnvironment {
         guard let path = ProcessInfo.processInfo.environment["BETTERCONSOLE_PROBE_FILTER"],
             let data = FileManager.default.contents(atPath: path)
         else { return nil }
-        return try? FilterFile.decode(data)
+        let name = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+        return try? FilterFile.decode(data, fallbackName: name).main
     }
 
     #if DEBUG

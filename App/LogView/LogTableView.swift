@@ -45,7 +45,7 @@ struct LogTableView: NSViewRepresentable {
             let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.id))
             tableColumn.title = column.title
             tableColumn.width = column.width
-            tableColumn.minWidth = column.style == .levelDot ? 24 : 40
+            tableColumn.minWidth = column.style == .levelSymbol ? 24 : 40
             tableColumn.resizingMask = [.userResizingMask, .autoresizingMask]
             table.addTableColumn(tableColumn)
         }
@@ -427,12 +427,12 @@ struct LogTableView: NSViewRepresentable {
                 cell.cachesLines = column.cachesLines
                 cell.text = entry.map(column.value) ?? ""
                 return cell
-            case .levelDot:
+            case .levelSymbol:
                 let cell =
                     tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-                    .map { unsafeDowncast($0, to: LevelDotCellView.self) }
-                    ?? LevelDotCellView(identifier: tableColumn.identifier)
-                cell.color = entry?.level.dotColor
+                    .map { unsafeDowncast($0, to: LevelSymbolCellView.self) }
+                    ?? LevelSymbolCellView(identifier: tableColumn.identifier)
+                cell.level = entry?.level
                 cell.setAccessibilityLabel(entry.map(column.value))
                 return cell
             }
@@ -655,11 +655,25 @@ final class LineCache {
 }
 
 /// The Type column: a colored dot for the entry's level.
-final class LevelDotCellView: NSTableCellView {
-    private static let diameter: CGFloat = 8
+final class LevelSymbolCellView: NSTableCellView {
+    private static let pointSize: CGFloat = 12
 
-    var color: NSColor? {
-        didSet { if color != oldValue { needsDisplay = true } }
+    /// One rendered image per level, built once: drawing a cached image keeps the cell as cheap
+    /// as the old dot under heavy scrolling.
+    @MainActor private static var images: [LogLevel: NSImage] = [:]
+
+    private static func image(for level: LogLevel) -> NSImage? {
+        if let cached = images[level] { return cached }
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
+            .applying(.init(paletteColors: [level.symbolColor]))
+        let image = NSImage(systemSymbolName: level.symbolName, accessibilityDescription: level.rawValue)?
+            .withSymbolConfiguration(config)
+        images[level] = image
+        return image
+    }
+
+    var level: LogLevel? {
+        didSet { if level != oldValue { needsDisplay = true } }
     }
 
     init(identifier: NSUserInterfaceItemIdentifier) {
@@ -673,11 +687,12 @@ final class LevelDotCellView: NSTableCellView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let color else { return }
-        let d = Self.diameter
-        let rect = NSRect(x: floor((bounds.width - d) / 2), y: floor((bounds.height - d) / 2), width: d, height: d)
-        color.setFill()
-        NSBezierPath(ovalIn: rect).fill()
+        guard let level, let image = Self.image(for: level) else { return }
+        let size = image.size
+        let rect = NSRect(
+            x: floor((bounds.width - size.width) / 2), y: floor((bounds.height - size.height) / 2),
+            width: size.width, height: size.height)
+        image.draw(in: rect)
     }
 }
 

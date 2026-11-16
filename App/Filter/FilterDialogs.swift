@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 import BCFilter
 
 /// What the user picked in the filter dropdown.
@@ -76,14 +75,28 @@ struct NameSheet: View {
 struct DeleteRequest: Identifiable {
     let id: UUID
     let name: String
-}
-
-struct ImportRejections: Identifiable {
-    let id = UUID()
-    let files: [(fileName: String, reason: String)]
+    /// Saved filters that link this one directly (`FilterWorkspace.directDependentsNames`),
+    /// sorted: their links stop matching.
+    var dependents: [String] = []
 
     var message: String {
-        files.map { "\($0.fileName): \($0.reason)" }.joined(separator: "\n")
+        dependents.isEmpty
+            ? "This can't be undone."
+            : EditorText.deleteWithDependents(name: name, dependents: dependents)
+    }
+}
+
+/// What Import reports: the files it rejected and the links nothing resolved.
+struct ImportProblems: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+
+    init?(_ report: FilterLibrary.ImportReport) {
+        guard let text = EditorText.importReport(rejected: report.rejected, missingLinks: report.missingLinks)
+        else { return nil }
+        title = text.title
+        message = text.message
     }
 }
 
@@ -106,7 +119,8 @@ extension View {
         }
     }
 
-    /// `Delete “<name>”?` — "This can't be undone." with Delete and Cancel.
+    /// `Delete “<name>”?` with Delete and Cancel: "This can't be undone.", or the filters
+    /// that link it (ES §9).
     func deleteFilterConfirmation(
         _ request: Binding<DeleteRequest?>, onDelete: @escaping (DeleteRequest) -> Void
     ) -> some View {
@@ -118,20 +132,18 @@ extension View {
         ) { r in
             Button("Delete", role: .destructive) { onDelete(r) }
             Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("This can't be undone.")
+        } message: { r in
+            Text(r.message)
         }
     }
 
-    /// Lists the files Import rejected, with their reasons.
-    func importRejectionsAlert(_ rejections: Binding<ImportRejections?>) -> some View {
+    /// Lists the files Import rejected, with their reasons, and the links it couldn't resolve.
+    func importProblemsAlert(_ problems: Binding<ImportProblems?>) -> some View {
         alert(
-            rejections.wrappedValue.map {
-                $0.files.count == 1 ? "A file couldn't be imported" : "\($0.files.count) files couldn't be imported"
-            } ?? "",
+            problems.wrappedValue?.title ?? "",
             isPresented: Binding(
-                get: { rejections.wrappedValue != nil }, set: { if !$0 { rejections.wrappedValue = nil } }),
-            presenting: rejections.wrappedValue
+                get: { problems.wrappedValue != nil }, set: { if !$0 { problems.wrappedValue = nil } }),
+            presenting: problems.wrappedValue
         ) { _ in
             Button("OK", role: .cancel) {}
         } message: { r in
@@ -219,27 +231,31 @@ private struct FilterLibraryAlerts: ViewModifier {
 
 @MainActor
 enum FilterPanels {
-    /// Open panel for one or more `.json` filter files; nil when cancelled.
+    /// Open panel for one or more filter files (`.bcfilter`, `.json`, `.txt` or no
+    /// extension, as the editor's Import); nil when cancelled.
     static func chooseImportFiles() -> [URL]? {
         let panel = NSOpenPanel()
         panel.title = "Import Filters"
         panel.prompt = "Import"
-        panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return nil }
+        let filter = ImportPanelFilter()
+        panel.delegate = filter
+        let response = panel.runModal()
+        withExtendedLifetime(filter) {}
+        guard response == .OK, !panel.urls.isEmpty else { return nil }
         return panel.urls
     }
 
-    /// Save panel suggesting `<name>.json`; nil when cancelled.
-    static func chooseExportURL(name: String) -> URL? {
+    /// Save panel with the editor's Format popup (Predicate text by default, or JSON),
+    /// suggesting `<name>.<extension>`; nil when cancelled.
+    static func chooseExport(name: String) -> (url: URL, format: FilterFileFormat)? {
         let panel = NSSavePanel()
         panel.title = "Export Filter"
         panel.prompt = "Export"
-        panel.allowedContentTypes = [.json]
-        let safe = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-        panel.nameFieldStringValue = "\(safe).json"
-        guard panel.runModal() == .OK else { return nil }
-        return panel.url
+        let format = ExportFormatPopup(panel: panel, name: name)
+        panel.accessoryView = format.view
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return (url, format.format)
     }
 }

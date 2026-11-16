@@ -9,6 +9,8 @@ public struct Bubble: Identifiable, Hashable, Sendable {
     public enum Content: Hashable, Sendable {
         case condition(FilterCondition, include: Bool)
         case advanced(FilterExpression)
+        /// A link to a saved filter (`.link`), or its exclusion (`.not(.link)`).
+        case link(UUID, include: Bool)
     }
 
     public init(id: UUID = UUID(), content: Content) {
@@ -23,15 +25,20 @@ public enum Connector: Sendable { case and, or }
 /// `BubbleCodec` writes, so what the bar shows is what the tree applies.
 public enum BubbleLayout {
     /// Advanced bubbles (in order), then include bubbles grouped by field in first-appearance
-    /// order, then exclude bubbles (in order).
+    /// order, then include links, then exclude bubbles, then exclude links (each in order).
+    /// Disabled conditions keep their place like any other.
     public static func ordered(_ bubbles: [Bubble]) -> [Bubble] {
         var advanced: [Bubble] = []
         var fields: [FilterField] = []
         var includes: [FilterField: [Bubble]] = [:]
         var excludes: [Bubble] = []
+        var includeLinks: [Bubble] = []
+        var excludeLinks: [Bubble] = []
         for b in bubbles {
             switch b.content {
             case .advanced: advanced.append(b)
+            case .link(_, let include):
+                if include { includeLinks.append(b) } else { excludeLinks.append(b) }
             case .condition(let c, let include):
                 if include {
                     if includes[c.field] == nil { fields.append(c.field) }
@@ -41,10 +48,11 @@ public enum BubbleLayout {
                 }
             }
         }
-        return advanced + fields.flatMap { includes[$0] ?? [] } + excludes
+        return advanced + fields.flatMap { includes[$0] ?? [] } + includeLinks + excludes + excludeLinks
     }
 
-    /// `.or` only between two include bubbles on the same field.
+    /// `.or` only between two include bubbles on the same field. Whether a condition is
+    /// enabled does not matter.
     public static func connector(between left: Bubble, and right: Bubble) -> Connector {
         if case .condition(let l, true) = left.content,
            case .condition(let r, true) = right.content, l.field == r.field {
@@ -71,6 +79,10 @@ public enum BubbleCodec {
                 } else {
                     read.append(Bubble(content: .advanced(child)))
                 }
+            } else if case .link(let id) = child {
+                read.append(Bubble(content: .link(id, include: true)))
+            } else if case .not(.link(let id)) = child {
+                read.append(Bubble(content: .link(id, include: false)))
             } else if case .not(.condition(let c)) = child {
                 read.append(Bubble(content: .condition(c, include: false)))
             } else {
@@ -80,7 +92,8 @@ public enum BubbleCodec {
         return BubbleLayout.ordered(read)
     }
 
-    /// `all(advanced…, any(includes of F1), any(includes of F2)…, not(exclude)…)`;
+    /// `all(advanced…, any(includes of F1), any(includes of F2)…, include links…,
+    /// not(exclude)…, not(link)…)`;
     /// an empty list is `nil` (no filter).
     public static func expression(from bubbles: [Bubble]) -> FilterExpression? {
         var front: [FilterExpression] = []
@@ -88,9 +101,13 @@ public enum BubbleCodec {
         var includeGroups: [[FilterCondition]] = []
         var groupIndex: [FilterField: Int] = [:]
         var excludes: [FilterExpression] = []
+        var includeLinks: [FilterExpression] = []
+        var excludeLinks: [FilterExpression] = []
         for b in bubbles {
             switch b.content {
             case .advanced(let e): front.append(e)
+            case .link(let id, true): includeLinks.append(.link(id))
+            case .link(let id, false): excludeLinks.append(.not(.link(id)))
             case .condition(let c, true):
                 if let i = groupIndex[c.field] {
                     includeGroups[i].append(c)
@@ -113,7 +130,9 @@ public enum BubbleCodec {
         }
         children += includeGroups.map { .any($0.map(FilterExpression.condition)) }
         children += shapedAdvanced
+        children += includeLinks
         children += excludes
+        children += excludeLinks
         return children.isEmpty ? nil : .all(children)
     }
 
@@ -141,20 +160,29 @@ public enum BubbleCodec {
 
 public enum BubbleEditing {
     /// Identical bubble: unchanged. Same condition with the opposite include: replaced in
-    /// place. Otherwise appended.
+    /// place. Otherwise appended. Link and disabled bubbles are never matched or replaced
+    /// (a disabled twin does not count as a duplicate).
     public static func adding(_ condition: FilterCondition, include: Bool, to bubbles: [Bubble])
         -> [Bubble]
     {
         var result = bubbles
         for (i, b) in bubbles.enumerated() {
             guard case .condition(let existing, let existingInclude) = b.content,
-                  existing == condition else { continue }
+                  existing.isEnabled, condition.isEnabled, existing == condition else { continue }
             if existingInclude == include { return bubbles }
             result[i].content = .condition(condition, include: include)
             return result
         }
         result.append(Bubble(content: .condition(condition, include: include)))
         return result
+    }
+
+    /// The bubble with `isEnabled` flipped when it is a condition; links and Advanced rules
+    /// come back unchanged. The id is kept.
+    public static func toggled(_ bubble: Bubble) -> Bubble {
+        guard case .condition(var c, let include) = bubble.content else { return bubble }
+        c.isEnabled.toggle()
+        return Bubble(id: bubble.id, content: .condition(c, include: include))
     }
 }
 
@@ -164,7 +192,9 @@ public enum ExpressionSummary {
     public static func text(_ e: FilterExpression) -> String {
         switch e {
         case .condition(let c):
-            "\(c.field.title) \(c.match.title) \"\(c.value)\""
+            conditionText(c)
+        case .link:
+            "linked filter"
         case .all(let xs):
             xs.isEmpty ? "(no condition)" : xs.map(nested).joined(separator: " and ")
         case .any(let xs):
@@ -172,6 +202,13 @@ public enum ExpressionSummary {
         case .not(let x):
             "not \(nested(x))"
         }
+    }
+
+    private static func conditionText(_ c: FilterCondition) -> String {
+        let field = c.field == .extra ? "\(c.field.title) \"\(c.key ?? "")\"" : c.field.title
+        let value = c.match == .between
+            ? "\"\(c.value)\" and \"\(c.upperValue ?? "")\"" : "\"\(c.value)\""
+        return "\(field) \(c.match.title(for: c.field)) \(value)"
     }
 
     private static func nested(_ e: FilterExpression) -> String {
