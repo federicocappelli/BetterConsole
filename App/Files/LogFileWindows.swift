@@ -52,12 +52,12 @@ enum LogFileWindows {
     }
 }
 
-/// The Save Logs target of the key file window. File windows are AppKit windows, so File ▸
-/// Save Logs… reads this when no SwiftUI focused value reaches it.
+/// Whether an opened file's window is key. File windows are AppKit windows, so File ▸ Save
+/// Logs… reads this to stay disabled while one is in front.
 @MainActor @Observable
 final class KeyLogFileWindow {
     static let shared = KeyLogFileWindow()
-    var saveTarget: SaveLogsTarget?
+    var isKey = false
 }
 
 /// File ▸ Open Recent: the files opened lately, newest first (kept by AppKit's document
@@ -102,7 +102,6 @@ struct OpenLogCommands: View {
 final class LogFileWindowController: NSWindowController, NSWindowDelegate {
     private let session: StreamSession
     private let registry: SessionRegistry
-    private var saveTarget: SaveLogsTarget?
     var onClose: () -> Void = {}
 
     init(url: URL, transport: FileLogTransport, environment: AppEnvironment) {
@@ -120,8 +119,7 @@ final class LogFileWindowController: NSWindowController, NSWindowDelegate {
         let hosting = NSHostingController(
             rootView: LogFileView(
                 session: session, library: environment.library, workspace: environment.workspace,
-                loadProgress: { transport.progress },
-                onSaveTarget: { [weak self] in self?.updateSaveTarget($0) }))
+                loadProgress: { transport.progress }))
         hosting.sceneBridgingOptions = [.title, .toolbars]
         hosting.sizingOptions = []
         window.contentViewController = hosting
@@ -133,19 +131,12 @@ final class LogFileWindowController: NSWindowController, NSWindowDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    private func updateSaveTarget(_ target: SaveLogsTarget) {
-        saveTarget = target
-        if window?.isKeyWindow == true { KeyLogFileWindow.shared.saveTarget = target }
-    }
-
     func windowDidBecomeKey(_ notification: Notification) {
-        KeyLogFileWindow.shared.saveTarget = saveTarget
+        KeyLogFileWindow.shared.isKey = true
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        if KeyLogFileWindow.shared.saveTarget?.session === session {
-            KeyLogFileWindow.shared.saveTarget = nil
-        }
+        KeyLogFileWindow.shared.isKey = false
     }
 
     /// Releases the session (and its share of the memory budget); an open filter editor for
@@ -165,12 +156,11 @@ private struct LogFileView: View {
     let library: FilterLibrary
     let workspace: FilterWorkspace
     let loadProgress: @MainActor () -> Double
-    let onSaveTarget: @MainActor (SaveLogsTarget) -> Void
 
     var body: some View {
         LogView(
             session: session, library: library, workspace: workspace,
-            loadProgress: loadProgress, onSaveTarget: onSaveTarget)
+            loadProgress: loadProgress)
             // The main window's `filterLibraryAlerts` reports load problems once; here only the
             // lasting warning is shown.
             .environment(\.filterLibraryWarning, library.saveProblem)

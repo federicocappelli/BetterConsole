@@ -14,9 +14,6 @@ struct LogView: View {
     let workspace: FilterWorkspace
     /// An opened file's share read so far (0...1), polled while it loads.
     var loadProgress: (@MainActor () -> Double)?
-    /// Told the Save Logs target whenever it changes (file windows, which are AppKit windows,
-    /// route File ▸ Save Logs… to their session through it).
-    var onSaveTarget: (@MainActor (SaveLogsTarget) -> Void)?
     /// Bumped by the Now button; the table scrolls to the bottom and resumes following.
     @State private var nowRequest = 0
     @State private var detail = LogDetailView.Content.none
@@ -46,7 +43,9 @@ struct LogView: View {
             }
         }
         .background { SessionSubtitle(session: session) }
-        .focusedSceneValue(\.saveLogsTarget, SaveLogsTarget(session: session, hasRows: hasRows))
+        .focusedSceneValue(
+            \.saveLogsTarget,
+            session.isFinite ? nil : SaveLogsTarget(session: session, hasRows: hasRows))
         .task(id: ObjectIdentifier(session)) {
             for await next in Observations({ [session] in
                 _ = session.revision
@@ -54,9 +53,6 @@ struct LogView: View {
             }) where next != hasRows {
                 hasRows = next
             }
-        }
-        .onChange(of: hasRows, initial: true) {
-            onSaveTarget?(SaveLogsTarget(session: session, hasRows: hasRows))
         }
         .navigationTitle(session.device.name)
         .toolbar {
@@ -281,7 +277,7 @@ private struct EmptyStateOverlay: View {
 
 // MARK: - Save Logs
 
-/// The session File ▸ Save Logs… acts on (the device selected in the sidebar, or a file).
+/// The session File ▸ Save Logs… acts on: the device selected in the sidebar.
 struct SaveLogsTarget {
     let session: StreamSession
     let hasRows: Bool
@@ -291,14 +287,14 @@ extension FocusedValues {
     @Entry var saveLogsTarget: SaveLogsTarget?
 }
 
-/// File ▸ Save Logs… (⌘S): enabled while the key window's list shows a row (the selected
-/// device's, or an opened file's).
+/// File ▸ Save Logs… (⌘S): enabled while the main window's list shows a row. Disabled while an
+/// opened file's window is key — saving a file's logs again makes no sense.
 struct SaveLogsCommand: View {
     @FocusedValue(\.saveLogsTarget) private var focused
 
-    /// File windows are AppKit windows: their target comes from `KeyLogFileWindow`, and wins
-    /// while a file window is key (the focused value may still be the main window's).
-    private var target: SaveLogsTarget? { KeyLogFileWindow.shared.saveTarget ?? focused }
+    /// File windows are AppKit windows, so the focused value may still be the main window's
+    /// while one is key: `KeyLogFileWindow` says when one is.
+    private var target: SaveLogsTarget? { KeyLogFileWindow.shared.isKey ? nil : focused }
 
     var body: some View {
         Button("Save Logs…") {
@@ -321,11 +317,7 @@ enum LogSaver {
         panel.title = "Save Logs"
         panel.prompt = "Save"
         panel.allowedContentTypes = [.log]
-        // An opened file's name without its extension: "app 2026-11-16 21-45.log".
-        let name =
-            session.device.kind == .file
-            ? (session.device.name as NSString).deletingPathExtension : session.device.name
-        panel.nameFieldStringValue = RowCopy.logFileName(deviceName: name, date: .now)
+        panel.nameFieldStringValue = RowCopy.logFileName(deviceName: session.device.name, date: .now)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             guard let pieces = await session.mapEntries(of: snapshot, { RowCopy.saveLines(for: $0) })
