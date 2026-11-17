@@ -6,6 +6,8 @@ BetterConsole is a macOS log viewer for developers. It streams live logs from yo
 simulators, and iPhones and iPads over USB or Wi‑Fi, and opens log files too. It does one thing
 Console.app does, streaming logs, and does it a lot better.
 
+![BetterConsole's main window: the device sidebar, the filter bar with bubbles, the log list and the message detail](screenshots/main_win.jpg)
+
 ## Why BetterConsole
 
 I spend a lot of my day in Console.app, watching my Mac, a simulator and the phone on my desk.
@@ -16,6 +18,8 @@ debug messages" that are hard or impossible to express.
 
 BetterConsole keeps what Console gets right (the token field and right‑click Show/Hide) and
 fixes the rest.
+
+![Right-clicking a message: Copy Process, and Hide or Show everything with the same process, PID, library, thread, subsystem, category, type or activity](screenshots/main_win_context_menu.jpg)
 
 ## Better than Console
 
@@ -34,6 +38,11 @@ fixes the rest.
 - **Reuse filters inside filters.** Link a saved "Noise" filter wherever you need it; edit it once,
   everything follows.
 - **Undo everything.** ⌘Z works across the builder, the text and imports.
+
+![The filter editor: nested groups in the builder on the left, the same filter as predicate text on the right, and the live match count at the bottom](screenshots/editor.jpg)
+
+Everything the editor can do is in the [filter editor documentation](App/Resources/FilterEditorHelp.html),
+also built into the app under **Help ▸ Editor Documentation**.
 
 ### 🤝 Speaks Apple's language
 
