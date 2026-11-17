@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import BCModel
 
@@ -36,9 +37,14 @@ struct LogDetailView: View, Equatable {
                     Text(entry.message)
                         .font(.system(size: 12, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.trailing, CopyButton.reservedWidth)
+                        .overlay(alignment: .topTrailing) {
+                            CopyButton(help: "Copy Message") { entry.message }
+                        }
                     Divider()
+                    let fields = Self.fields(of: entry)
                     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 3) {
-                        ForEach(Array(Self.fields(of: entry).enumerated()), id: \.offset) { _, field in
+                        ForEach(Array(fields.enumerated()), id: \.offset) { _, field in
                             GridRow {
                                 Text(field.name)
                                     .foregroundStyle(.secondary)
@@ -50,6 +56,10 @@ struct LogDetailView: View, Equatable {
                         }
                     }
                     .font(.system(size: 11))
+                    .padding(.trailing, CopyButton.reservedWidth)
+                    .overlay(alignment: .topTrailing) {
+                        CopyButton(help: "Copy All Fields") { Self.text(of: fields) }
+                    }
                 }
                 .padding(10)
                 .textSelection(.enabled)
@@ -104,6 +114,11 @@ struct LogDetailView: View, Equatable {
         return fields
     }
 
+    /// The fields as "Name: value" lines, for the fields section's copy button.
+    static func text(of fields: [Field]) -> String {
+        fields.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
+    }
+
     /// Compact JSON-like text; top-level strings are shown without quotes.
     static func render(_ value: JSONValue, quoted: Bool = true) -> String {
         switch value {
@@ -134,5 +149,37 @@ struct EntryKey: Equatable {
     init(_ entry: LogEntry) {
         id = entry.id
         date = entry.date
+    }
+}
+
+/// A small copy button for a detail section's top-right corner. It shows a checkmark for a
+/// moment after copying.
+private struct CopyButton: View {
+    /// Room kept free at the section's right edge so text never runs under the button.
+    static let reservedWidth: CGFloat = 26
+
+    let help: String
+    let text: () -> String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text(), forType: .string)
+            copied = true
+            Task {
+                try? await Task.sleep(for: .seconds(1.2))
+                copied = false
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .frame(width: 16, height: 16)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(copied ? Color.green : Color.secondary)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
