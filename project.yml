@@ -27,6 +27,8 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Wi-Fi device streaming (BCMobileDevice): macOS asks for Local Network access.
+        NSLocalNetworkUsageDescription: BetterConsole streams logs from your iPhone or iPad over Wi-Fi.
         # The builder's private row drag (App/Filter/Editor/BuilderDrag.swift).
         # Log files open in their own windows (App/Files/LogFileWindows.swift).
         CFBundleDocumentTypes:

@@ -6,7 +6,7 @@ import Testing
 
 struct DeviceRosterTests {
     static let udid = "00000000-0000000000000000"
-    static let info = DeviceInfo(name: "PhoneVac", productType: "iPhone19,2", productVersion: "27.2.1")
+    static let info = DeviceInfo(name: "Test iPhone", productType: "iPhone19,2", productVersion: "27.2.1")
 
     @Test func usbDeviceIsListedOnceInfoIsKnown() {
         var roster = DeviceRoster()
@@ -16,32 +16,83 @@ struct DeviceRosterTests {
         let changed2 = roster.setInfo(Self.info, for: Self.udid)
         #expect(changed2)
         #expect(roster.devices == [
-            LogDevice(id: Self.udid, name: "PhoneVac", kind: .physical, model: "iPhone 18 Pro", osVersion: "iOS 27.2.1"),
+            LogDevice(id: Self.udid, name: "Test iPhone", kind: .physical, model: "iPhone 18 Pro", osVersion: "iOS 27.2.1",
+                      connection: .usb),
         ])
     }
 
-    @Test func networkOnlyDeviceIsNotListed() {
+    @Test func networkOnlyDeviceIsListedAsWifi() {
         var roster = DeviceRoster()
         _ = roster.attached(udid: Self.udid, interface: .network)
         _ = roster.setInfo(Self.info, for: Self.udid)
-        #expect(roster.devices.isEmpty)
+        #expect(roster.devices.map(\.connection) == [.wifi])
+        #expect(roster.interfaces(of: Self.udid) == [.network])
     }
 
-    /// The same phone is reported on USB and network at once; pulling the cable removes it
-    /// even though the network interface remains (USB is the supported transport).
-    @Test func unplugRemovesDeviceEvenIfNetworkRemains() {
+    /// The same phone is reported on USB and network at once: one device, USB preferred.
+    @Test func deviceOnBothInterfacesIsListedOnceAsUSB() {
+        var roster = DeviceRoster()
+        _ = roster.attached(udid: Self.udid, interface: .network)
+        _ = roster.attached(udid: Self.udid, interface: .usb)
+        _ = roster.setInfo(Self.info, for: Self.udid)
+        #expect(roster.devices.map(\.id) == [Self.udid])
+        #expect(roster.devices.first?.connection == .usb)
+        #expect(roster.interfaces(of: Self.udid) == [.usb, .network])
+    }
+
+    /// Pulling the cable keeps the device listed while it is still on the network; it goes
+    /// only when gone from both.
+    @Test func unplugKeepsDeviceOnWifiUntilGoneFromBoth() {
         var roster = DeviceRoster()
         _ = roster.attached(udid: Self.udid, interface: .usb)
         _ = roster.attached(udid: Self.udid, interface: .network)
         _ = roster.setInfo(Self.info, for: Self.udid)
-        #expect(roster.devices.count == 1)
         let changed3 = roster.detached(udid: Self.udid, interface: .usb)
         #expect(changed3)
-        #expect(roster.devices.isEmpty)
-        // Replug: info is remembered, the device is listed again immediately.
-        let changed4 = roster.attached(udid: Self.udid, interface: .usb)
+        #expect(roster.devices.map(\.connection) == [.wifi])
+        let changed4 = roster.detached(udid: Self.udid, interface: .network)
         #expect(changed4)
-        #expect(roster.devices.map(\.name) == ["PhoneVac"])
+        #expect(roster.devices.isEmpty)
+        #expect(roster.interfaces(of: Self.udid).isEmpty)
+        // Replug: info is remembered, the device is listed again immediately.
+        let changed5 = roster.attached(udid: Self.udid, interface: .usb)
+        #expect(changed5)
+        #expect(roster.devices.map(\.name) == ["Test iPhone"])
+        #expect(roster.devices.first?.connection == .usb)
+    }
+
+    /// Wi-Fi going away while on USB leaves the device as it was.
+    @Test func networkLossWhileOnUSBKeepsDeviceOnUSB() {
+        var roster = DeviceRoster()
+        _ = roster.attached(udid: Self.udid, interface: .usb)
+        _ = roster.attached(udid: Self.udid, interface: .network)
+        _ = roster.setInfo(Self.info, for: Self.udid)
+        let before = roster.devices
+        _ = roster.detached(udid: Self.udid, interface: .network)
+        #expect(roster.devices == before)
+    }
+
+    /// A device seen only on Wi-Fi is listed once its real info is known, never under the
+    /// generic fallback name (USB devices keep the fallback).
+    @Test func networkOnlyDeviceNeedsRealInfo() {
+        var roster = DeviceRoster()
+        _ = roster.attached(udid: Self.udid, interface: .network)
+        let fallback = DeviceInfo(name: "iOS Device", productType: nil, productVersion: nil)
+        _ = roster.setInfo(fallback, for: Self.udid, provisional: true)
+        #expect(roster.devices.isEmpty)
+        _ = roster.attached(udid: Self.udid, interface: .usb)
+        #expect(roster.devices.map(\.name) == ["iOS Device"])
+        _ = roster.detached(udid: Self.udid, interface: .usb)
+        #expect(roster.devices.isEmpty)
+        _ = roster.setInfo(Self.info, for: Self.udid)
+        #expect(roster.devices.map(\.name) == ["Test iPhone"])
+    }
+
+    @Test func otherInterfacesAreNotListed() {
+        var roster = DeviceRoster()
+        _ = roster.attached(udid: Self.udid, interface: .other)
+        _ = roster.setInfo(Self.info, for: Self.udid)
+        #expect(roster.devices.isEmpty)
     }
 
     /// The "iOS Device" fallback is listed but not cached: the next attach re-reads info.
@@ -54,7 +105,20 @@ struct DeviceRosterTests {
         #expect(!roster.hasInfo(Self.udid))
         _ = roster.setInfo(Self.info, for: Self.udid)
         #expect(roster.hasInfo(Self.udid))
-        #expect(roster.devices.map(\.name) == ["PhoneVac"])
+        #expect(roster.devices.map(\.name) == ["Test iPhone"])
+    }
+
+    /// A fallback name stored after the real one (a slow USB read losing a race with a Wi-Fi
+    /// read) is ignored.
+    @Test func provisionalInfoNeverReplacesRealInfo() {
+        var roster = DeviceRoster()
+        _ = roster.attached(udid: Self.udid, interface: .usb)
+        _ = roster.setInfo(Self.info, for: Self.udid)
+        let fallback = DeviceInfo(name: "iOS Device", productType: nil, productVersion: nil)
+        let changed = roster.setInfo(fallback, for: Self.udid, provisional: true)
+        #expect(!changed)
+        #expect(roster.hasInfo(Self.udid))
+        #expect(roster.devices.map(\.name) == ["Test iPhone"])
     }
 
     @Test func duplicateEventsReportNoChange() {

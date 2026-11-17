@@ -28,7 +28,9 @@ public final class StreamSession {
         case finished
     }
 
-    public let device: LogDevice
+    /// The device as last discovered (a late name, a changed connection): the registry keeps
+    /// it current while the device is present, so titles and file names follow.
+    public private(set) var device: LogDevice
     public private(set) var state: State = .idle
     /// The source is finite (an opened file): it ends in `.finished`, and its entries wait for
     /// room in the queue instead of being dropped.
@@ -177,6 +179,12 @@ public final class StreamSession {
     }
 
     // MARK: Device presence (driven by SessionRegistry)
+
+    /// The discovery reported `device` (same id) with new details.
+    func deviceUpdated(_ device: LogDevice) {
+        guard device.id == self.device.id, device != self.device else { return }
+        self.device = device
+    }
 
     var isDisconnected: Bool {
         if case .disconnected = state { true } else { false }

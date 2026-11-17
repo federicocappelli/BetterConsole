@@ -38,6 +38,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>BetterConsole streams logs from your iPhone or iPad over Wi-Fi.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

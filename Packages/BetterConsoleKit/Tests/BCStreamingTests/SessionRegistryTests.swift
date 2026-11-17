@@ -348,4 +348,90 @@ final class SessionRegistryTests {
         #expect(s.state == .paused)
         #expect(transport.callCount == 1)
     }
+
+    // MARK: Wi-Fi (the transport switches interfaces; the registry only sees the device change)
+
+    static let phoneUSB = LogDevice(id: "phone-w", name: "W Phone", kind: .physical, connection: .usb)
+    static let phoneWifi = LogDevice(id: "phone-w", name: "W Phone", kind: .physical, connection: .wifi)
+
+    /// The cable is pulled while streaming and the phone stays on Wi-Fi: one row, still
+    /// available, now marked Wi-Fi; the session keeps streaming into the same store with the
+    /// same stream (the transport switched), and ids keep increasing.
+    @Test func usbToWifiKeepsStreamingWithoutDisconnecting() async {
+        await push([mac, Self.phoneUSB])
+        let s = registry.session(for: Self.phoneUSB.id)!
+        s.start()
+        transport.yield(makeEntries(1..<3))
+        #expect(await eventually { s.store.count == 2 })
+        await push([mac, Self.phoneWifi])
+        #expect(s.state == .streaming)
+        #expect(registry.rows.filter { $0.id == Self.phoneUSB.id }.count == 1)
+        #expect(row(Self.phoneUSB.id)?.isAvailable == true)
+        #expect(row(Self.phoneUSB.id)?.device.connection == .wifi)
+        #expect(registry.session(for: Self.phoneUSB.id) === s)
+        // The reconnected relay numbers from 1 again; the session re-stamps.
+        transport.yield(makeEntries(1..<3))
+        #expect(await eventually { s.store.count == 4 })
+        #expect(transport.callCount == 1)
+        #expect(!transport.isTerminated(0))
+        let ids = (0..<s.store.count).map { s.store[$0].id }
+        #expect(ids == [1, 2, 3, 4])
+        // USB returns mid-stream: no restart.
+        await push([mac, Self.phoneUSB])
+        #expect(s.state == .streaming)
+        #expect(transport.callCount == 1)
+        #expect(row(Self.phoneUSB.id)?.device.connection == .usb)
+    }
+
+    /// Gone from both interfaces: greyed and auto-resumed when it comes back (on either).
+    @Test func goneFromBothDisconnectsAndResumesOnReturn() async {
+        await push([mac, Self.phoneWifi])
+        let s = registry.session(for: Self.phoneWifi.id)!
+        s.start()
+        transport.yield(makeEntries(1..<2))
+        #expect(await eventually { s.store.count == 1 })
+        await push([mac])
+        #expect(s.state == .disconnected(wasStreaming: true))
+        #expect(row(Self.phoneWifi.id)?.isAvailable == false)
+        await push([mac, Self.phoneUSB])
+        #expect(s.state == .streaming)
+        #expect(transport.callCount == 2)
+    }
+
+    /// The Wi-Fi link dies: the stream fails (liveness) and the device leaves the network
+    /// list, in either order; both end as a disconnect that auto-resumes.
+    @Test(arguments: [true, false])
+    func wifiLossEndsAsDisconnect(failureFirst: Bool) async {
+        await push([mac, Self.phoneWifi])
+        let s = registry.session(for: Self.phoneWifi.id)!
+        s.start()
+        transport.yield(makeEntries(1..<2))
+        #expect(await eventually { s.store.count == 1 })
+        if failureFirst {
+            transport.finish(throwing: FakeError())
+            #expect(await eventually { s.state == .failed("child exited") })
+            await push([mac])
+        } else {
+            await push([mac])
+            transport.finish(throwing: FakeError())
+        }
+        #expect(s.state == .disconnected(wasStreaming: true))
+        await push([mac, Self.phoneWifi])
+        #expect(s.state == .streaming)
+    }
+
+    /// A name that arrives late (or any other change to the device) reaches the existing
+    /// session, so its window title and Save Logs file name follow.
+    @Test func sessionFollowsTheDiscoveredDevice() async {
+        let generic = LogDevice(id: "phone-w", name: "iOS Device", kind: .physical, connection: .usb)
+        await push([mac, generic])
+        let s = registry.session(for: generic.id)!
+        #expect(s.device.name == "iOS Device")
+        await push([mac, Self.phoneWifi])
+        #expect(registry.session(for: generic.id) === s)
+        #expect(s.device == Self.phoneWifi)
+        // While disconnected the session keeps the last device it saw.
+        await push([mac])
+        #expect(s.device == Self.phoneWifi)
+    }
 }

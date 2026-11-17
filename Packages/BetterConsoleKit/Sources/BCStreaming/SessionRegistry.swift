@@ -124,6 +124,8 @@ public final class SessionRegistry {
             onSessionCreated?(session)
         }
 
+        for (id, device) in merged { sessions[id]?.deviceUpdated(device) }
+
         // This discovery has seen these devices since any earlier failure.
         for device in devices { sessions[device.id]?.failedSinceDeviceSeen = false }
 

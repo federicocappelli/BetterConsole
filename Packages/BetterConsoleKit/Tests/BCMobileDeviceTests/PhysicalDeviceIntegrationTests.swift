@@ -4,7 +4,7 @@ import Synchronization
 import Testing
 @testable import BCMobileDevice
 
-/// Runs against a real device only when `BC_DEVICE_UDID` names one attached over USB:
+/// Runs against a real device only when `BC_DEVICE_UDID` names one attached over USB or Wi-Fi:
 /// `BC_DEVICE_UDID=<udid> swift test --filter PhysicalDeviceIntegrationTests`.
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["BC_DEVICE_UDID"] != nil))
 struct PhysicalDeviceIntegrationTests {

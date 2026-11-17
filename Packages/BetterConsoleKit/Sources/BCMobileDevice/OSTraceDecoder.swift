@@ -50,9 +50,14 @@ public struct OSTraceDecoder {
 
     private var buffer: [UInt8] = []
     private var start = 0
-    private var nextID: UInt64 = 1
+    /// The id the next decoded entry gets.
+    public private(set) var nextID: UInt64
 
-    public init() {}
+    /// `firstID`: the first entry's id (a stream reconnected over another interface continues
+    /// its numbering).
+    public init(firstID: UInt64 = 1) {
+        nextID = firstID
+    }
 
     /// Appends `bytes` and returns the entries of every frame now complete.
     public mutating func feed(_ bytes: Data) -> [LogEntry] {

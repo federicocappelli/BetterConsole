@@ -161,13 +161,18 @@ public enum MobileDeviceError: Error, Equatable, CustomStringConvertible {
     case badStatusReply(String)
     case connectionClosed
     case receiveFailed(String)
+    /// Opening a Wi-Fi connection failed for good and the Local Network check was refused
+    /// (access off, or the prompt not answered yet).
+    case localNetworkDenied
+    /// A silent Wi-Fi connection to a device no longer reported on the network.
+    case networkConnectionLost
 
     public var description: String {
         switch self {
         case .frameworkUnavailable:
             "MobileDevice.framework is not available on this Mac."
         case .deviceNotConnected:
-            "The device is not connected over USB."
+            "The device is not connected."
         case .notPaired:
             "This device isn't paired with this Mac. Connect it in Finder and tap Trust on the device, then retry."
         case .callFailed(let function, let code, let text):
@@ -178,6 +183,10 @@ public enum MobileDeviceError: Error, Equatable, CustomStringConvertible {
             "The connection to the device was closed."
         case .receiveFailed(let reason):
             "Reading from the device failed: \(reason)."
+        case .localNetworkDenied:
+            "Couldn't connect over Wi-Fi: Local Network access looks off for BetterConsole. Allow it when macOS asks, or in System Settings ▸ Privacy & Security ▸ Local Network, then retry."
+        case .networkConnectionLost:
+            "The device is no longer reachable over Wi-Fi."
         }
     }
 }

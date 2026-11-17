@@ -4,7 +4,8 @@ import CoreFoundation
 import Foundation
 import Synchronization
 
-/// Lists physical iOS devices attached over USB, driven by MobileDevice notifications.
+/// Lists physical iOS devices reachable over USB or the network (Wi-Fi sync), one per UDID,
+/// driven by MobileDevice notifications.
 /// If the framework cannot be loaded, emits `[]` once and stays open.
 public struct MobileDeviceDiscovery: DeviceDiscovery {
     private let source: (any DeviceListSource)?
@@ -62,25 +63,27 @@ struct DeviceInfo: Sendable, Equatable {
         "iPhone18,2": "iPhone 17 Pro Max",
         "iPhone18,3": "iPhone 17",
         "iPhone18,4": "iPhone Air",
-        "iPhone19,2": "iPhone 18 Pro",  // observed: PhoneVac
+        "iPhone19,2": "iPhone 18 Pro",
     ]
 
-    func logDevice(udid: String) -> LogDevice {
+    func logDevice(udid: String, connection: LogDevice.Connection) -> LogDevice {
         LogDevice(
             id: udid,
             name: name,
             kind: .physical,
             model: productType.map(Self.marketingName),
-            osVersion: productVersion.map { "iOS \($0)" })
+            osVersion: productVersion.map { "iOS \($0)" },
+            connection: connection)
     }
 }
 
 /// Which devices are attached on which interfaces, plus what is known about each. Pure value
 /// logic, so the attach/detach/replug rules are testable without hardware.
 ///
-/// Only USB is listed: the same phone is often reported on USB and network at once, and
-/// streaming is supported (and unplug detected) over USB. A device is listed once its name
-/// is known; info is remembered across unplug and replug.
+/// The same phone is often reported on USB and network at once: it is listed once, as `.usb`
+/// while on USB (streams prefer it), else `.wifi`, and only removed once gone from both. A
+/// device is listed once its name is known (over Wi-Fi only, its real name: the fallback is
+/// for USB); info is remembered across unplug and replug.
 struct DeviceRoster {
     private var interfaces: [String: Set<DeviceInterface>] = [:]
     private var info: [String: DeviceInfo] = [:]
@@ -99,11 +102,21 @@ struct DeviceRoster {
         return true
     }
 
+    /// A provisional (fallback) name is ignored once real info is known: a slow USB read can
+    /// finish after a Wi-Fi read or stream open stored the real name.
     mutating func setInfo(_ info: DeviceInfo, for udid: String, provisional: Bool = false) -> Bool {
+        if provisional, hasInfo(udid) { return false }
         if provisional { self.provisional.insert(udid) } else { self.provisional.remove(udid) }
         guard self.info[udid] != info else { return false }
         self.info[udid] = info
         return true
+    }
+
+    func interfaces(of udid: String) -> Set<DeviceInterface> { interfaces[udid] ?? [] }
+
+    /// The stored info and whether it is the provisional fallback.
+    func storedInfo(_ udid: String) -> (info: DeviceInfo, provisional: Bool)? {
+        info[udid].map { ($0, provisional.contains(udid)) }
     }
 
     /// True once real (not fallback) info is known.
@@ -111,8 +124,18 @@ struct DeviceRoster {
 
     var devices: [LogDevice] {
         interfaces
-            .filter { $0.value.contains(.usb) }
-            .compactMap { udid, _ in info[udid]?.logDevice(udid: udid) }
+            .compactMap { udid, interfaces -> LogDevice? in
+                let connection: LogDevice.Connection
+                if interfaces.contains(.usb) {
+                    connection = .usb
+                } else if interfaces.contains(.network), !provisional.contains(udid) {
+                    // Wi-Fi only: listed under its real name, never the fallback.
+                    connection = .wifi
+                } else {
+                    return nil
+                }
+                return info[udid]?.logDevice(udid: udid, connection: connection)
+            }
             .sorted { ($0.name, $0.id) < ($1.name, $1.id) }
     }
 }
@@ -120,13 +143,14 @@ struct DeviceRoster {
 // MARK: - Monitor
 
 /// The process-wide MobileDevice notification subscription. Owns a retained `AMDeviceRef` per
-/// attached (udid, interface) and publishes the USB device list.
+/// attached (udid, interface) and publishes the device list (USB and network).
 ///
 /// Threads: notifications arrive on a dedicated thread running its own run loop (the
-/// subscription is made there). Device info is read on a serial queue, since reading it
-/// connects to the device and blocks. All mutable state is behind one `Mutex`; subscribers are
-/// called while it is held, so they observe changes in order (they only yield to a stream).
-final class MobileDeviceMonitor: DeviceListSource {
+/// subscription is made there). Device info is read by `DeviceInfoLoader` on its own queues,
+/// since reading it connects to the device and blocks. All mutable state is behind one
+/// `Mutex`; subscribers are called while it is held, so they observe changes in order (they
+/// only yield to a stream).
+final class MobileDeviceMonitor: DeviceListSource, DeviceInfoSource {
     static let shared: MobileDeviceMonitor? = MobileDeviceAPI.load().map(MobileDeviceMonitor.init)
 
     private struct Key: Hashable {
@@ -137,7 +161,6 @@ final class MobileDeviceMonitor: DeviceListSource {
     private struct State {
         var roster = DeviceRoster()
         var refs: [Key: OpaqueRef] = [:]
-        var infoInFlight: Set<String> = []
         var subscribers: [Int: @Sendable ([LogDevice]) -> Void] = [:]
         var nextToken = 0
         var published: [LogDevice] = []
@@ -145,11 +168,9 @@ final class MobileDeviceMonitor: DeviceListSource {
 
     private static let messageConnected: UInt32 = 1
     private static let messageDisconnected: UInt32 = 2
-    private static let infoAttempts = 5
-
     let api: MobileDeviceAPI
     private let state = Mutex(State())
-    private let infoQueue = DispatchQueue(label: "BCMobileDevice.deviceInfo", qos: .utility)
+    private let infoLoader = DeviceInfoLoader()
 
     private init(api: MobileDeviceAPI) {
         self.api = api
@@ -175,13 +196,18 @@ final class MobileDeviceMonitor: DeviceListSource {
         state.withLock { _ = $0.subscribers.removeValue(forKey: token) }
     }
 
-    /// A +1 retained USB `AMDeviceRef` for `udid`; the caller must `deviceRelease` it.
-    func retainedUSBDevice(udid: String) -> OpaqueRef? {
+    /// A +1 retained `AMDeviceRef` for `udid` on `interface`; the caller must `deviceRelease` it.
+    func retainedDevice(udid: String, interface: DeviceInterface) -> OpaqueRef? {
         state.withLock { state in
-            guard let ref = state.refs[Key(udid: udid, interface: .usb)] else { return nil }
+            guard let ref = state.refs[Key(udid: udid, interface: interface)] else { return nil }
             _ = api.deviceRetain(ref.pointer)
             return ref
         }
+    }
+
+    /// The interfaces `udid` is currently attached on.
+    func interfaces(of udid: String) -> Set<DeviceInterface> {
+        state.withLock { $0.roster.interfaces(of: udid) }
     }
 
     // MARK: Notifications
@@ -191,9 +217,8 @@ final class MobileDeviceMonitor: DeviceListSource {
         // with fresh bundle ids: with it, the subscription itself triggers the "find devices on
         // local networks" prompt (nehelper alert logged at the same millisecond as "Subscribed
         // for device notifications from usbmuxd"); with empty options, no LocalNetwork check
-        // happens at all. MobileDevice has no USB-only subscription option (USBMux/RemoteXPC
-        // options were tried and still deliver network devices), so network-interface devices
-        // are dropped in `handle` before any call that could talk to them.
+        // happens at all. Empty options still deliver network (Wi-Fi sync) devices, which are
+        // listed and streamed from (see `handle`).
         let options = [:] as CFDictionary
         var notification: UnsafeMutableRawPointer?
         let context = Unmanaged.passUnretained(self).toOpaque()  // `shared` lives forever
@@ -214,26 +239,27 @@ final class MobileDeviceMonitor: DeviceListSource {
     }
 
     private func handle(device: UnsafeMutableRawPointer, message: UInt32) {
-        // Filter by interface first: a network (or any non-USB) device ref is never retained,
-        // stored, connected to or queried, so nothing here can reach the local network.
+        // USB and network (Wi-Fi sync) refs are kept, one per (udid, interface); any other
+        // interface is ignored before any call that could talk to the device.
+        let interface = api.interface(of: device)
         guard message == Self.messageConnected || message == Self.messageDisconnected,
-              api.interface(of: device) == .usb,
+              interface == .usb || interface == .network,
               let udid = api.identifier(of: device)
         else { return }
-        let key = Key(udid: udid, interface: .usb)
+        let key = Key(udid: udid, interface: interface)
         if message == Self.messageConnected {
             _ = api.deviceRetain(device)
             let needsInfo = state.withLock { state -> Bool in
                 if let old = state.refs.updateValue(OpaqueRef(device), forKey: key) {
                     api.deviceRelease(old.pointer)
                 }
-                if state.roster.attached(udid: udid, interface: key.interface) { publish(&state) }
-                guard !state.roster.hasInfo(udid),
-                      state.infoInFlight.insert(udid).inserted
-                else { return false }
-                return true
+                // Only a new attach (re)starts reading: a duplicate notification must not reset
+                // a running schedule.
+                guard state.roster.attached(udid: udid, interface: key.interface) else { return false }
+                publish(&state)
+                return !state.roster.hasInfo(udid)
             }
-            if needsInfo { loadInfo(udid: udid) }
+            if needsInfo { infoLoader.load(udid: udid, over: interface, from: self) }
         } else {
             state.withLock { state in
                 if let old = state.refs.removeValue(forKey: key) { api.deviceRelease(old.pointer) }
@@ -251,25 +277,28 @@ final class MobileDeviceMonitor: DeviceListSource {
 
     // MARK: Device info
 
-    /// Reads name, product type and version; retries while the device is still attached
-    /// (right after plug-in lockdown may not answer yet). Falls back to a generic name.
-    private func loadInfo(udid: String, attempt: Int = 1) {
-        infoQueue.async { [self] in
-            guard let ref = retainedUSBDevice(udid: udid) else {
-                state.withLock { _ = $0.infoInFlight.remove(udid) }
-                return
-            }
-            let info = readInfo(ref.pointer)
-            api.deviceRelease(ref.pointer)
-            if info == nil, attempt < Self.infoAttempts {
-                infoQueue.asyncAfter(deadline: .now() + 1) { [self] in loadInfo(udid: udid, attempt: attempt + 1) }
-                return
-            }
-            let resolved = info ?? DeviceInfo(name: "iOS Device", productType: nil, productVersion: nil)
-            state.withLock { state in
-                state.infoInFlight.remove(udid)
-                if state.roster.setInfo(resolved, for: udid, provisional: info == nil) { publish(&state) }
-            }
+    /// A stream opened over `interface`: reads the device's info now if it is still missing.
+    func streamOpened(udid: String, over interface: DeviceInterface) {
+        infoLoader.streamOpened(udid: udid, over: interface, from: self)
+    }
+
+    func readInfo(udid: String, over interface: DeviceInterface) -> DeviceInfo? {
+        guard let ref = retainedDevice(udid: udid, interface: interface) else { return nil }
+        defer { api.deviceRelease(ref.pointer) }
+        return readInfo(ref.pointer)
+    }
+
+    func isAttached(udid: String, over interface: DeviceInterface) -> Bool {
+        interfaces(of: udid).contains(interface)
+    }
+
+    func hasInfo(udid: String) -> Bool {
+        state.withLock { $0.roster.hasInfo(udid) }
+    }
+
+    func infoLoaded(_ info: DeviceInfo, udid: String, provisional: Bool) {
+        state.withLock { state in
+            if state.roster.setInfo(info, for: udid, provisional: provisional) { publish(&state) }
         }
     }
 

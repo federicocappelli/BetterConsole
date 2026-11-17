@@ -33,10 +33,17 @@ private struct DeviceRow: View {
 
     var body: some View {
         Label {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.device.name)
-                if let subtitle {
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(row.device.name)
+                    if let subtitle {
+                        Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+                // Only while available: a greyed row's last interface is stale.
+                if row.isAvailable, let connection = row.device.connection {
+                    ConnectionBadge(connection: connection)
                 }
             }
         } icon: {
@@ -58,5 +65,19 @@ private struct DeviceRow: View {
         case .physical: (row.device.model ?? "").hasPrefix("iPad") ? "ipad" : "iphone"
         case .file: "doc.text"
         }
+    }
+}
+
+/// How a physical device is reachable now: on USB (streams prefer it) or over Wi-Fi only.
+/// Availability, not the interface a running stream uses.
+private struct ConnectionBadge: View {
+    let connection: LogDevice.Connection
+
+    var body: some View {
+        Image(systemName: connection == .usb ? "cable.connector" : "wifi")
+            .imageScale(.small)
+            .foregroundStyle(.secondary)
+            .help(connection == .usb ? "Available over USB" : "Wi-Fi only")
+            .accessibilityLabel(connection == .usb ? "USB" : "Wi-Fi")
     }
 }
