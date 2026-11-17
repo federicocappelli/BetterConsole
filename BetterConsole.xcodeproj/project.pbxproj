@@ -39,6 +39,7 @@
 		8FAEB1A38CC5B102A8D74722 /* FollowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10686D4D33ACBF799CF2EAF1 /* FollowTracker.swift */; };
 		99AD5E39330675552C4CBAC8 /* LogFileText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F77FE4058584225D5E3417 /* LogFileText.swift */; };
 		9A11019A2CEF5DC091E9589D /* PredicateTextMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E9F22464C3E02020B0D2ED /* PredicateTextMapping.swift */; };
+		9A2B0FDF3C80703014445E7E /* FilterEditorHelp.html in Resources */ = {isa = PBXBuildFile; fileRef = C08DC0E4B478231525508492 /* FilterEditorHelp.html */; };
 		A2360D653E1482374F84343A /* FilterEditorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C8ED50B70CC7B1BAD0B231E /* FilterEditorWindow.swift */; };
 		AB2F25032757831E877E3959 /* EditorUndoRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF160D617577BFEDCC8032EA /* EditorUndoRoutingTests.swift */; };
 		AB9D9DF3F818AC522C146E93 /* PredicateTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB46C9736A172F7AB3D46B6 /* PredicateTextView.swift */; };
@@ -100,6 +101,7 @@
 		BD2F503C977CB70DC79A5EDD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BED9D092EDB1840DD3154E0A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BF160D617577BFEDCC8032EA /* EditorUndoRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorUndoRoutingTests.swift; sourceTree = "<group>"; };
+		C08DC0E4B478231525508492 /* FilterEditorHelp.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = FilterEditorHelp.html; sourceTree = "<group>"; };
 		C4399D09B85BC4C560D03E25 /* DeviceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSidebar.swift; sourceTree = "<group>"; };
 		C6F3C8BF435F1F1D827CDA40 /* BubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleView.swift; sourceTree = "<group>"; };
 		D199AB61D3B143C1879316F8 /* BetterConsole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BetterConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -152,6 +154,7 @@
 				E4128FF528006ABEA2DB181F /* Files */,
 				A6F223B2B34065E36ADF67C1 /* Filter */,
 				FD58F6E936F6C6F1ECE3B8A5 /* LogView */,
+				AE4F20E7DC2AFF7E6778B3FC /* Resources */,
 				B9F2DB786628CC8FCA95F7F2 /* Settings */,
 				80497E4725E530FC0DA82A5D /* Sidebar */,
 			);
@@ -225,6 +228,14 @@
 				42C4246C7D2EF1FA07B2BC9D /* Editor */,
 			);
 			path = Filter;
+			sourceTree = "<group>";
+		};
+		AE4F20E7DC2AFF7E6778B3FC /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				C08DC0E4B478231525508492 /* FilterEditorHelp.html */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		B5A18E0F793D3872C650F508 = {
@@ -383,6 +394,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D7F49789E0A52724E2B420FC /* Assets.xcassets in Resources */,
+				9A2B0FDF3C80703014445E7E /* FilterEditorHelp.html in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

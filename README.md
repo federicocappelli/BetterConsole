@@ -1,99 +1,122 @@
 # BetterConsole
 
-A macOS log viewer for developers: live logs from your Mac, booted simulators and USB‑connected
-iPhones, with filtering you can read, save, share and edit.
+**Console.app's log stream, with filters you can actually read, write, save and share.**
 
-BetterConsole does one thing Console.app does, streaming logs, and tries to do it much better.
-It has no crash, spin or diagnostic reports, and no log archives. It's just the live log stream,
-plus a filter system built for people who look at logs every day.
+BetterConsole is a macOS log viewer for developers. It streams live logs from your Mac, booted
+simulators, and iPhones and iPads over USB or Wi‑Fi, and opens log files too. It does one thing
+Console.app does, streaming logs, and does it a lot better.
 
-## Why I built it
+## Why BetterConsole
 
-I spend a lot of my day in Console.app, watching logs from the Mac I'm working on, from
-simulators and from a phone on my desk. Streaming works well. Filtering is where the time goes:
+I spend a lot of my day in Console.app, watching my Mac, a simulator and the phone on my desk.
+Streaming works fine. Filtering is where the time goes: rebuilding the same queries by hand, a
+one-line search field that scrolls out of sight, never knowing whether two tokens mean AND or OR,
+saved searches I can't read or share, and rules like "this process and this subsystem, but no
+debug messages" that are hard or impossible to express.
 
-- **Queries can't be kept or shared.** I build the same filters by hand again and again. A
-  saved search lives inside Console, so I can't send it to a colleague, keep it in a repo, or
-  edit it in a text editor.
-- **The search field is a single line.** Anything beyond three tokens scrolls out of sight,
-  and I can't see the whole query at once.
-- **It's never clear how tokens combine.** Do two tokens mean AND or OR? Does a third one
-  change that? The field doesn't say, so I end up guessing and re-reading the results.
-- **Saved searches are opaque.** I can't see what a saved search contains, or change it,
-  without applying it first.
-- **No real rules.** Something like "(this process AND this subsystem) but not debug
-  messages" is hard or impossible to express.
+BetterConsole keeps what Console gets right (the token field and right‑click Show/Hide) and
+fixes the rest.
 
-Console does get two things right: the token ("bubble") field, and right‑clicking a message to
-show or hide everything like it. BetterConsole keeps both and builds the rest around them.
+## Better than Console
 
-## How it's better than Console
+### 🔎 Filtering
+
+- **See how your filter combines.** Every pair of bubbles says **or**, **and** or **not**.
+  No more guessing.
+- **Filters that wrap, not scroll.** Long filters flow onto several lines, all visible at once.
+- **A real filter editor.** Nested groups (All of, Any of, None of, Not all of) in a visual
+  builder, side by side with the same filter as text. Edit either; the other follows.
+- **Regex on any field.** Process, subsystem, message, PID, even Type.
+- **Compare, don't just match.** `Type at least Error`, `PID > 500`, time ranges like
+  `21:45:30–21:46:00`, even across midnight.
+- **Switch conditions off** with a checkbox instead of deleting them.
+- **Live preview.** "Would match 1,204 of 98,310 messages" updates as you type.
+- **Reuse filters inside filters.** Link a saved "Noise" filter wherever you need it; edit it once,
+  everything follows.
+- **Undo everything.** ⌘Z works across the builder, the text and imports.
+
+### 🤝 Speaks Apple's language
+
+- **Xcode and `log` predicate syntax.** The editor's text is the predicate language
+  `log stream --predicate` and Xcode's console use.
+- **Copy as log predicate.** One click gives you a command‑line ready predicate; parts only
+  BetterConsole understands are highlighted and left out.
+
+### 💾 Save and share
+
+- **Filters are files.** Export as readable predicate text (`.bcfilter`) or JSON, keep them in a
+  repo, send them to a colleague. Linked filters travel in the same file.
+- **Named filters, one click away.** A dropdown of saved filters, with "(Edited)" when what you
+  see isn't what's saved.
+- **Each device remembers its filter.** Mac, simulator and phone each keep their own, across
+  relaunches.
+
+### 📱 Devices
+
+- **iPhone and iPad over USB or Wi‑Fi.** USB first; unplug the cable mid-stream and it carries
+  on over Wi‑Fi, in the same list, with no gap.
+- **Simulators appear on their own** as you boot them.
+- **Unplugged isn't gone.** A device's row and logs stay; streaming resumes when it's back.
+
+### 📄 Log files
+
+- **Save Logs (⌘S)** writes what's on screen, filter applied, to a `.log` file. No need to
+  select everything first.
+- **Open `.log` files** in their own window with the full filter toolbox. BetterConsole's own
+  format, `log show` output, syslog, JSON lines and plain text are parsed into process,
+  subsystem, category and message on a best‑effort basis.
+
+### ⚡️ Fast, and honest under load
+
+- **Tens of thousands of messages a second**, in an `NSTableView` built for it.
+- **Filter changes never freeze the window.** Stored messages are re‑checked in the background,
+  newest first, so what you're looking at appears first. Nothing is thrown away.
+- **Dropped messages are counted**, never lost silently.
+- **One memory cap you control** (default 4 GB); the oldest messages go first.
+
+## At a glance
 
 | | Console.app | BetterConsole |
 |---|---|---|
-| How tokens combine | Implicit | Shown between every pair of bubbles: **or** for the same field, **and** across fields, **not** for excludes |
-| Long filters | One scrolling line | Bubbles wrap onto several lines |
-| Saved filters | Hidden until applied | A dropdown of named filters; "(Edited)" when what you see differs from what's saved |
-| Sharing | Not possible | Export and import filters as plain JSON files |
-| Right‑click Hide/Show | Yes | Yes: Process, PID, Library, Thread ID, Subsystem, Category, Type, Activity ID |
-| Memory | No setting | A single cap you set (default 4 GB); oldest messages go first |
+| How tokens combine | Implicit | Shown between every bubble |
+| Long filters | One scrolling line | Wrapping bubbles, plus a full editor |
+| Nested rules (A and B) or C | ✗ | ✓ |
+| Regex on any field | ✗ | ✓ |
+| Type, number and time comparisons | ✗ | ✓ |
+| Live match count while editing | ✗ | ✓ |
+| Saved filters you can read and edit | ✗ | ✓ |
+| Share filters as files | ✗ | ✓ `.bcfilter` / JSON |
+| `log` / Xcode predicate syntax | ✗ | ✓ |
+| Save visible logs to a file | Select all first | ⌘S |
+| Open and filter `.log` files | ✗ | ✓ |
+| Memory limit | No setting | One cap you set |
 
-On top of that:
-
-- **Each device keeps its own filter.** Your Mac, a simulator and a phone can each have a
-  different filter, and each comes back when you relaunch.
-- **Changing a filter on a busy stream doesn't freeze anything.** Messages already in memory
-  are re-checked in the background, newest first, so the rows you're looking at appear first.
-  Removing a filter brings every message back, because nothing is thrown away.
-- **Heavy load is visible.** It keeps up at tens of thousands of messages a second; anything
-  that can't be kept is dropped and **counted** in the window's subtitle, never lost silently.
-
-### Filtering in practice
+## A filter, written down
 
 ```
-[ DDG Errors (Edited) ▾ ] [ PROCESS is DuckDuckGo ] or [ PROCESS is Safari ] and [ ⊘ TYPE is debug ]  type here…  [Save] [⋯]
+// BetterConsole filter
+// version: 1
+// name: DDG Errors
+process ==[c] "DuckDuckGo"
+AND messageType >= error
+AND NOT filter == "Noise"
+
+// filter: Noise
+subsystem BEGINSWITH[c] "com.apple."
 ```
 
-- **Type, press Return, get a bubble.** Suggestions appear as you type, including process,
-  subsystem, category and library names seen in this device's logs. "Message contains" is
-  the default.
-- **Click a bubble** to change its field, its match type (contains, is, starts with, regex) or
-  whether it includes or excludes.
-- **Right‑click any message** to hide or show everything from the same process, subsystem,
-  category, thread and so on.
-- **Save, Save As, Rename, Duplicate, Export, Import, Delete** are in the bar's "…" menu.
-- Matching ignores case. An invalid regex shows up as a red bubble and is ignored until you
-  fix it, so it never silently breaks the filter.
-
-A saved filter is a small JSON file, readable and editable by hand:
-
-```json
-{
-  "format": "betterconsole.filter",
-  "version": 1,
-  "name": "DDG Errors",
-  "expression": { "all": [
-    { "any": [ { "condition": { "field": "process", "match": "is", "value": "DuckDuckGo" } } ] },
-    { "not": { "condition": { "field": "type", "match": "is", "value": "debug" } } }
-  ] }
-}
-```
-
-`format`, `version` and `id` are optional when importing; `name` and `expression` are required,
-and every field and match type is checked at import, so a filter that imports always works.
-The format is an expression tree (all / any / not), so richer rules than the bar can show
-already round‑trip. A visual editor for grouped rules is planned (see Roadmap).
+Readable, diff‑friendly, and (apart from the `filter ==` link) ready for
+`log stream --predicate`.
 
 ## Sources
 
 - **This Mac**, through `log stream`.
-- **Booted simulators**, through `xcrun simctl spawn <device> log stream`. They appear and
-  disappear as you boot and shut them down.
-- **iPhones and iPads connected by USB**, through Apple's private `MobileDevice.framework`, the
-  same path Console.app uses. This code lives in a single module (`BCMobileDevice`) behind a
-  protocol, so the transport can be swapped later.
-
-Unplugging a device keeps its row and its logs. Plug it back in and streaming resumes on its own.
+- **Booted simulators**, through `xcrun simctl spawn <device> log stream`.
+- **iPhones and iPads**, over USB or Wi‑Fi, through Apple's private `MobileDevice.framework`,
+  the same path Console.app uses. For Wi‑Fi, the device must be paired and have "Show this
+  iPhone when on Wi‑Fi" (Finder) or "Connect via network" (Xcode) turned on. This code lives in
+  a single module (`BCMobileDevice`) behind a protocol, so the transport can be swapped later.
+- **Log files**, from File ▸ Open… (⌘O), Open Recent, or Open With in Finder.
 
 ## Requirements
 
@@ -101,85 +124,14 @@ Unplugging a device keeps its row and its logs. Plug it back in and streaming re
 - Xcode 27 with the iOS platform installed (for simulators)
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) 2.46 or later, if you change `project.yml`
 
-## Building
-
-```sh
-git clone <this repo>
-cd BetterConsole
-xcodegen generate            # only needed after editing project.yml
-open BetterConsole.xcodeproj
-```
-
-Build and run the `BetterConsole` scheme. The project signs ad hoc, so no developer account
-is needed to run it locally.
-
-Tests:
-
-```sh
-swift test --package-path Packages/BetterConsoleKit
-xcodebuild test -project BetterConsole.xcodeproj -scheme BetterConsole -destination 'platform=macOS'
-```
-
-Performance checks (Release build, skipped by default):
-
-```sh
-BC_PERF=1 swift test -c release --package-path Packages/BetterConsoleKit --filter FilterPerformanceTests
-```
-
-`docs/RELEASE.md` describes the throughput probe and the `scripts/flood.sh` load generator.
-
-## How it's put together
-
-```
-App/                         SwiftUI app shell, AppKit log table, filter bar, settings
-Packages/BetterConsoleKit/
-  BCModel                    LogEntry and decoding of `log stream` NDJSON
-  BCStore                    in-memory ring buffer and the global memory budget
-  BCTransport                device discovery and process-based log transports (Mac, simulators)
-  BCMobileDevice             the only code that touches MobileDevice.framework
-  BCStreaming                per-device sessions: bounded queue, filtering, match index, rescans
-  BCFilter                   filter model, evaluation, JSON format, bubbles, saved-filter library
-```
-
-- **Logs live in memory only.** Nothing is written to disk. The memory cap (Settings) bounds
-  how much is kept.
-- **The log list is an `NSTableView`** with fixed row heights, cell reuse and batched updates,
-  because SwiftUI's `Table` can't keep up with this insert rate.
-- **Filtering never blocks the window.** New messages are checked off the main thread
-  before they reach the screen. A filter change re-checks stored messages in the background,
-  newest first, while the list fills in progressively.
-- **Measured on the development Mac (Release build):** checking a new message against a typical
-  five-bubble filter takes about 0.7 µs. Re-checking 800,000 stored messages takes about 0.65 s,
-  in steps of under 2 ms on the main thread.
-
 ## Privacy
 
-BetterConsole makes no network connections of its own. Device discovery is USB only, so it
-never asks for Local Network access. Logs stay in memory and are gone when you quit. Saved
-filters are stored in `~/Library/Application Support/BetterConsole/` and leave that folder
-only when you export them.
-
-## Limitations
-
-- **iOS devices use a private Apple framework.** It works today and is what Console.app uses,
-  but Apple can change it in any release.
-- **No log archives, no reports.** BetterConsole streams live logs only.
-- **The app is not sandboxed.** It needs to run `log` and `simctl` and to load
-  `MobileDevice.framework`, so it can't ship through the Mac App Store.
-- `<private>` values in messages are redacted exactly as Console.app shows them.
-
-## Roadmap
-
-- A grouped‑rule editor for filters like `(A and B) when C ≠ D`: a visual builder and an
-  expandable text form kept in sync.
-- Column customisation and a configurable time format.
-- Exporting selected messages to a file, and reopening that file for filtering later.
-
-## Contributing
-
-Issues and pull requests are welcome. Please run both test suites before opening a PR, and
-keep anything that touches `MobileDevice.framework` inside `BCMobileDevice`.
+BetterConsole sends nothing anywhere. It talks only to your own devices: to iPhones and iPads
+over Wi‑Fi it connects directly on your local network, so macOS asks for Local Network access
+the first time. USB‑only use never needs it. Logs stay in memory and are gone when you quit,
+unless you save them. Saved filters live in `~/Library/Application Support/BetterConsole/`
+and leave that folder only when you export them.
 
 ## License
 
-Not yet chosen. Until a license is added, all rights are reserved.
+TBC

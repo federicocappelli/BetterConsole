@@ -21,6 +21,10 @@ struct BetterConsoleApp: App {
             CommandGroup(after: .newItem) { OpenLogCommands(environment: appDelegate.environment) }
             // After, not replacing: `.saveItem` also holds Close (⌘W) and Close All (⌥⌘W).
             CommandGroup(after: .saveItem) { SaveLogsCommand() }
+            // Replaces "BetterConsole Help", which only says help isn't available.
+            CommandGroup(replacing: .help) {
+                Button("Editor Documentation") { FilterEditorHelp.open() }
+            }
         }
 
         Settings {

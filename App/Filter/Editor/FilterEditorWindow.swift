@@ -160,6 +160,8 @@ struct FilterEditorView: View {
                 Button("Export…") { state.export() }
                     .disabled(!model.canApply)
                     .help(model.canApply ? "Save this filter to a file" : EditorText.fixErrorFirst)
+                Button("Documentation") { FilterEditorHelp.open() }
+                    .help("Open the filter editor's documentation in your browser")
             }
         }
         .sheet(item: $state.nameSheet) { request in
@@ -184,5 +186,22 @@ private struct ExternalChangeBanner: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.yellow.opacity(0.12))
+    }
+}
+
+/// The filter editor's documentation: a page bundled with the app (App/Resources), opened in
+/// the default web browser.
+@MainActor
+enum FilterEditorHelp {
+    static var url: URL? { Bundle.main.url(forResource: "FilterEditorHelp", withExtension: "html") }
+
+    static func open() {
+        guard let url else { NSSound.beep(); return }
+        // The app that opens web links, so the page never lands in a text editor that claims .html.
+        if let browser = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://example.com")!) {
+            NSWorkspace.shared.open([url], withApplicationAt: browser, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
