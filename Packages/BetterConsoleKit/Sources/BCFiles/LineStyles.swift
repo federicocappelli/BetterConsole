@@ -140,6 +140,41 @@ enum LineStyles {
         return f
     }
 
+    /// The table's columns, tab-separated, as BetterConsole's Copy writes them (and as Save Logs
+    /// wrote them before the BetterConsole log format): exactly six fields — time, type name,
+    /// process, subsystem, category, message. The time may be a full timestamp or a time of
+    /// day alone (dated on `today`).
+    static func columns(_ b: UnsafeBufferPointer<UInt8>, today: Date, timeZone: TimeZone) -> Fields? {
+        var tabs: [Int] = []
+        for i in b.indices where b[i] == UInt8(ascii: "\t") {
+            tabs.append(i)
+            if tabs.count > 5 { return nil }
+        }
+        guard tabs.count == 5 else { return nil }
+        let time = UnsafeBufferPointer(rebasing: b[0..<tabs[0]])
+        guard let ts = LogTimestamps.parseISO(time, at: 0, timeZone: timeZone)
+            ?? LogTimestamps.parseTimeOnly(time, at: 0, today: today, timeZone: timeZone),
+            ts.end == time.count
+        else { return nil }
+        let c = ByteCursor(b, at: 0)
+        func field(_ n: Int) -> String {
+            let start = tabs[n - 1] + 1
+            let end = n < 5 ? tabs[n] : b.count
+            return c.string(start..<end)
+        }
+        guard let level = LogLevel(rawValue: field(1).capitalized) else { return nil }
+        var f = Fields(seconds: ts.seconds)
+        f.level = level
+        let process = field(2)
+        if !process.isEmpty { f.process = process }
+        let subsystem = field(3)
+        if !subsystem.isEmpty { f.subsystem = subsystem }
+        let category = field(4)
+        if !category.isEmpty { f.category = category }
+        f.message = field(5)
+        return f
+    }
+
     /// Generic: a leading timestamp (optionally in brackets), then an optional level word, an
     /// optional `process[pid]` or `process:` and an optional `[subsystem:category]`.
     static func generic(_ b: UnsafeBufferPointer<UInt8>, today: Date, timeZone: TimeZone) -> Fields? {

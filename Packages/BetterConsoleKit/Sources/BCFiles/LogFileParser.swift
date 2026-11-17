@@ -49,7 +49,7 @@ public struct LogFileParser {
     private var output: [LogEntry] = []
 
     enum Style: CaseIterable {
-        case logDefault, logCompact, logSyslog, syslog, generic
+        case logDefault, logCompact, logSyslog, syslog, columns, generic
     }
 
     public init(
@@ -285,6 +285,7 @@ public struct LogFileParser {
         case .logCompact: LineStyles.logCompact(b, timeZone: timeZone)
         case .logSyslog: LineStyles.logSyslog(b, timeZone: timeZone)
         case .syslog: LineStyles.syslog(b, today: now, timeZone: timeZone)
+        case .columns: LineStyles.columns(b, today: modificationDate, timeZone: timeZone)
         case .generic: LineStyles.generic(b, today: now, timeZone: timeZone)
         }
     }
