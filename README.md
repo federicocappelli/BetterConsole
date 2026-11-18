@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="App/Assets.xcassets/AppIcon.appiconset/icon_256x256@2x.png" alt="BetterConsole app icon" width="160">
+</p>
+
 # BetterConsole
 
 **Console.app's log stream, with filters you can actually read, write, save and share.**
@@ -75,7 +79,7 @@ also built into the app under **Help ▸ Editor Documentation**.
   format, `log show` output, syslog, JSON lines and plain text are parsed into process,
   subsystem, category and message on a best‑effort basis.
 
-![Two saved .log files open in their own windows, each with its own filter, beside the main window](screenshots/multy_file_window.png)
+![Two saved .log files open in their own windows, each with its own filter, beside the main window](screenshots/multi_file_window.png)
 
 ### ⚡️ Fast, and honest under load
 
