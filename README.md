@@ -125,12 +125,9 @@ Readable, diff‑friendly, and (apart from the `filter ==` link) ready for
 
 ## Sources
 
-- **This Mac**, through `log stream`.
-- **Booted simulators**, through `xcrun simctl spawn <device> log stream`.
-- **iPhones and iPads**, over USB or Wi‑Fi, through Apple's private `MobileDevice.framework`,
-  the same path Console.app uses. For Wi‑Fi, the device must be paired and have "Show this
-  iPhone when on Wi‑Fi" (Finder) or "Connect via network" (Xcode) turned on. This code lives in
-  a single module (`BCMobileDevice`) behind a protocol, so the transport can be swapped later.
+- **The Mac**
+- **Booted simulators**
+- **iPhones and iPads**, over USB or Wi‑Fi
 - **Log files**, from File ▸ Open… (⌘O), Open Recent, or Open With in Finder.
 
 ## Requirements
@@ -146,6 +143,11 @@ over Wi‑Fi it connects directly on your local network, so macOS asks for Local
 the first time. USB‑only use never needs it. Logs stay in memory and are gone when you quit,
 unless you save them. Saved filters live in `~/Library/Application Support/BetterConsole/`
 and leave that folder only when you export them.
+
+## Contributing
+
+Anyone can contribute: fork the repo, make your change and open a pull request. Bug fixes, new
+features, docs and ideas are all welcome.
 
 ## License
 
