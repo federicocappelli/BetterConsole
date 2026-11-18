@@ -75,6 +75,8 @@ also built into the app under **Help ▸ Editor Documentation**.
   format, `log show` output, syslog, JSON lines and plain text are parsed into process,
   subsystem, category and message on a best‑effort basis.
 
+![Two saved .log files open in their own windows, each with its own filter, beside the main window](screenshots/multy_file_window.png)
+
 ### ⚡️ Fast, and honest under load
 
 - **Tens of thousands of messages a second**, in an `NSTableView` built for it.
@@ -143,4 +145,5 @@ and leave that folder only when you export them.
 
 ## License
 
-TBC
+BetterConsole is licensed under the [Apache License 2.0](LICENSE). Use it, change it and share
+it freely; copies and derivative works must keep the licence and the credit in [NOTICE](NOTICE).
